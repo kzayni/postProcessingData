@@ -105,3 +105,64 @@ body {
 .header-text p {
   margin: 0;
 }
+
+.info-section {
+
+  margin-bottom: 24px;
+
+  background: white;
+
+  border: 1px solid #d9e2ec;
+
+  border-radius: 14px;
+
+  padding: 22px;
+
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+
+}
+
+.info-section h2 {
+
+  margin: 0 0 16px 0;
+
+  font-size: 22px;
+
+  color: #1f2933;
+
+}
+
+.table-wrapper {
+
+  width: 100%;
+
+  overflow-x: auto;
+
+}
+
+.participant-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  background: white;
+}
+
+.participant-table th,
+
+.participant-table td {
+  padding: 12px 14px;
+  border: 1px solid #d9e2ec;
+  text-align: center;
+  vertical-align: top;
+
+}
+
+.participant-table th {
+  background: #f8fafc;
+  font-weight: 700;
+  color: #334e68;
+}
+
+.participant-table tbody tr:nth-child(even) {
+  background: #f9fafb;
+}

@@ -5,6 +5,20 @@ import plotly.graph_objects as go
 
 ROOT_DIR = Path(".")
 
+# -----------------------------------------------------------------------------
+# Participant metadata
+# -----------------------------------------------------------------------------
+# This table is displayed at the top of the website and summarizes the
+# participants included in the current post-processing.
+PARTICIPANTS = [
+    {
+        "pid": "001",
+        "organization": "Polytechnique Montréal",
+        "solvers": "CHAMPS",
+        "names": "XXX",
+        "tfgs": "2",
+    },
+]
 
 # -----------------------------------------------------------------------------
 # Dataset configuration
@@ -652,6 +666,52 @@ def figure_to_html_div(fig: go.Figure, filename: str) -> str:
 # -----------------------------------------------------------------------------
 # Website generation
 # -----------------------------------------------------------------------------
+def build_participants_table(participants: list[dict]) -> str:
+    """
+    Build a non-collapsible participant information table.
+
+    Columns:
+        - Participant ID (PID)
+        - Organization
+        - Solver(s)
+        - Name(s)
+        - TFG(s)
+    """
+    rows_html = ""
+
+    for participant in participants:
+        rows_html += f"""
+          <tr>
+            <td>{participant["pid"]}</td>
+            <td>{participant["organization"]}</td>
+            <td>{participant["solvers"]}</td>
+            <td>{participant["names"]}</td>
+            <td>{participant["tfgs"]}</td>
+          </tr>
+        """
+
+    return f"""
+    <section class="info-section">
+      <h2>Participant Information</h2>
+
+      <div class="table-wrapper">
+        <table class="participant-table">
+          <thead>
+            <tr>
+              <th>Participant ID (PID)</th>
+              <th>Organization</th>
+              <th>Solver(s)</th>
+              <th>Name(s)</th>
+              <th>TFG(s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows_html}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    """
 
 def build_case_section(case_title: str, subsections: list[dict]) -> str:
     """
@@ -684,10 +744,12 @@ def build_case_section(case_title: str, subsections: list[dict]) -> str:
     """
 
 
-def build_index_html(case_sections_html: str) -> str:
+def build_index_html(participants_table_html: str, case_sections_html: str) -> str:
     """
     Build the complete website HTML.
 
+    The participant table is non-collapsible.
+    The test-case sections below it are collapsible.
     The visual styling is handled by the static style.css file.
     """
     return f"""
@@ -710,6 +772,7 @@ def build_index_html(case_sections_html: str) -> str:
                     </div>
                 </header>
                 <main class="page-content">
+                    {participants_table_html}
                     {case_sections_html}
                 </main>
             </body>
@@ -752,7 +815,8 @@ def main() -> None:
         ],
     )
 
-    index_html = build_index_html(test_case_241_html)
+    participants_table_html = build_participants_table(PARTICIPANTS)
+    index_html = build_index_html(participants_table_html, test_case_241_html)
 
     (ROOT_DIR / "index.html").write_text(index_html)
 
