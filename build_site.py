@@ -106,29 +106,48 @@ def get_dataset_path(dataset: dict, path_key: str = "path") -> str:
 
 def get_participant_id_from_path(path: str) -> str:
     """
-    Extract the participant ID from the first folder in the path.
+    Extract the Participant ID, PID, from the first folder.
 
     Example:
-        001_POLIMO_CHAMPS/001_TC241_01/file.dat
-
-    returns:
-        001
+        001_POLIMO_CHAMPS/... -> 001
     """
     folder_name = Path(path).parts[0]
     match = re.match(r"^(\d{3})", folder_name)
     return match.group(1) if match else "Unknown"
 
 
+def get_dataset_id_from_path(path: str) -> str:
+    """
+    Extract the Dataset ID, DID, from the case/submission folder.
+
+    Example:
+        001_TC241_01/... -> 01
+    """
+    parts = Path(path).parts
+
+    if len(parts) < 2:
+        return "Unknown"
+
+    dataset_folder = parts[1]
+    match = re.match(r"^\d{3}_TC\d+_(\d{2})", dataset_folder)
+
+    return match.group(1) if match else "Unknown"
+
+
 def get_dataset_name(dataset: dict) -> str:
     """
-    Return the display name used in the Plotly legend.
+    Return the legend name using the format PID.DID.
 
-    Participant datasets are renamed automatically using the first three digits
-    of the participant folder name.
+    Example:
+        PID = 001
+        DID = 01
+        legend = 001.01
     """
     if dataset["kind"] == "participant":
         path = get_dataset_path(dataset, "iceShapePath")
-        return f"Participant {get_participant_id_from_path(path)}"
+        pid = get_participant_id_from_path(path)
+        did = get_dataset_id_from_path(path)
+        return f"{pid}.{did}"
 
     return dataset["name"]
 
@@ -798,7 +817,7 @@ def main() -> None:
         subsections=[
             {
                 "title": "Ice Shape Plot",
-                "description": "Comparison of clean shape, experimental ice shape, and participant-submitted ice shape.",
+                "description": "Legend Correponds to Participant ID . Dataset ID",
                 "figure_html": figure_to_html_div(
                     ice_shape_fig,
                     filename="IPW1_Case_241_ice_shape",
@@ -806,7 +825,7 @@ def main() -> None:
             },
             {
                 "title": "Collection Efficiency Plot",
-                "description": "Collection efficiency distribution for the participant-submitted solution.",
+                "description": "Legend Correponds to Participant ID . Dataset ID",
                 "figure_html": figure_to_html_div(
                     collection_efficiency_fig,
                     filename="IPW1_Case_241_collection_efficiency",
