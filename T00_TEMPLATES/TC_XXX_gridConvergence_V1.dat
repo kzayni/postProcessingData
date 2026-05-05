@@ -1,0 +1,48 @@
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#   IPW-3 Grid Convergence DATA SUBMITTAL FORM for Test Case ###, May 4th 2026
+#   Author: MKZ, adapted from HLPW-6 submission files
+#
+#
+#       NOMENCLATURE:
+#         GRID_LEVEL [-]: 1 = finest grid, 4 = coarsest grid
+#                  N [-]: Number of unknowns (grid cells, order from finest to coarsest)
+#                 CL [-]:	Coefficient of lift (patch or total)
+#                 CD [-]:	Coefficient of drag (patch or total)
+#      CMX, CMY, CMZ [-]: Moment coefficient components about the moment reference center (MRC)
+#        WATER_MASS [kg]:	Impinged water mass (patch or total)
+#          ICE_MASS [kg]:	Accreted Ice mass (patch or total)
+#   WATER_EVAP_MASS [kg]:	Evaporated water mass (patch or total)
+#
+#
+#                XXX:   Participant ID (assigned by IPW committee); e.g., 001, 020, 147
+#                ###:   Test case name (NACA0012_AE3932, NACA0012_3933, ONERAM6)
+#            DATASET:   Sequential number, should start at 01 for each participant 
+#
+#    E.g. TITLE field could be: 001_NACA0012_AE3932_03 for the third submission by participant 1 for the case NACA0012_AE3932
+#
+#    FLOW CONDITIONS:
+#                        AOA : 4.0 deg
+#                 Mach Number: 0.3114 [-]
+#                         MAC: 0.5334 [m]
+#             Reynolds Number: 3.8441 million (based on MAC)
+#             Freestream Temp: XXX [K]
+#              Reference area: 0.97548 [m2]
+#     Moment Reference Center: 0.13335, 0, 0 [m] (X, Y, Z)
+#
+#              NOTES: 1. Please use at least 5 decimal places in the numerical values
+#                     2. If data are NOT provided, please fill data fields with a numerical value of "-999" 
+#
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+##### INTERNAL COMMENT : SHOULD SPECIFY WHICH BINS WE WANT e.g WATER_MASS_BIN_04 for the 04 bin in the ? #####
+
+VARIABLES = "GRID_LEVEL" "N" "CL" "CD" "CMX" "CMY" "CMZ" "WATER_MASS" "ICE_MASS" "WATER_EVAP_MASS"
+
+#The following Section is for integrated data on all 4 grid levels 
+ZONE T="GRID_CONVERGENCE_###_DATASET"
+# Supply as many lines as grid levels run:
+1 1.00e+07 -999 -999 -999 -999 -999 -999 -999 -999 
+2 2.53e+06 -999 -999 -999 -999 -999 -999 -999 -999
+3 9.88e+05 -999 -999 -999 -999 -999 -999 -999 -999 
+4 4.86e+05 -999 -999 -999 -999 -999 -999 -999 -999
