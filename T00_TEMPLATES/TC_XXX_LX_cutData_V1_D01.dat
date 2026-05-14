@@ -43,27 +43,17 @@
 #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-                                                                                    <- Optional ->                 
-VARIABLES = "X" "Y" "Z" "X_ICED" "Y_ICED" "Z_ICED" "s" "Cp" "HTC" "Beta" "Ts" "FF" "k" "RhoIce" "HTC_CLEAN"
+                                                             <- Optional ->                 
+VARIABLES = "X" "Y" "Z" "Cp" "HTC" "Beta" "Ts" "FF" "k" "RhoIce" "HTC_CLEAN"
 
 ##### INTERNAL COMMENT : WILL ADD DETAILS ABOUT THE SLICE ONCE THE FORMAT IS AGREED #####
-##### INTERNAL COMMENT : Roughenss and density we could take them as AUXDATA?? #####
 
 # The following section contains first-layer surface variables for the selected grid level.
 # Each ZONE corresponds to one slice location and one droplet-bin distribution.
-ZONE T="SLICE_Y_###_BINS03_DATASET"
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
+ZONE T="SLICE_Y_BINS03_DATASET"
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
 
-ZONE T="SLICE_Y_###_BINS07_DATASET"
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
-
-ZONE T="SLICE_Y_###_BINS15_DATASET"
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
--999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
 
 
