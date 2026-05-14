@@ -54,7 +54,8 @@ def get_case_ids(participants) -> list[str]:
     return ordered_valid_cases + extra_detected_cases
 
 
-def build_participants_table() -> str:
+def build_participants_table(participant_colors) -> str:
+
     readme_path = Path("README.md")
 
     if not readme_path.exists():
@@ -85,6 +86,8 @@ def build_participants_table() -> str:
         """
 
     header_cells = [cell.strip() for cell in table_lines[0].strip("|").split("|")]
+    header_cells_with_color = header_cells + ["Color"]
+
     data_lines = table_lines[2:]
     rows = []
 
@@ -92,21 +95,34 @@ def build_participants_table() -> str:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) != len(header_cells):
             continue
+
+        participant_id = cells[0]
+        color = participant_colors.get(participant_id, "black")
+
         row_html = "<tr>"
+
         for cell in cells:
             row_html += f"<td>{html.escape(cell)}</td>"
+
+        row_html += f"""
+            <td>
+                <span class="participant-color-line" style="background-color: {html.escape(color)};"></span>
+                <span>{html.escape(color)}</span>
+            </td>
+        """
+
         row_html += "</tr>"
         rows.append(row_html)
 
     header_html = "<tr>"
-    for header in header_cells:
+    for header in header_cells_with_color:
         header_html += f"<th>{html.escape(header)}</th>"
     header_html += "</tr>"
 
     if not rows:
         rows_html = f"""
         <tr>
-            <td colspan="{len(header_cells)}">No participants found in README.md.</td>
+            <td colspan="{len(header_cells_with_color)}">No participants found in README.md.</td>
         </tr>
         """
     else:
@@ -398,11 +414,15 @@ def main() -> None:
         "TC_NACA0012_AE3933": (0.0, None, 0.0),
         "TC_ONERAM6": (0.0, None, 0.0),
     }
+    
+    participant_colors = {
+        "001": "blue",
+    }
 
     participants = load_participants(ROOT_DIR, highlight_points_by_case=highlight_points_by_case, clean_s_cache=args.clean)
     case_ids = get_case_ids(participants)
 
-    participants_table_html = build_participants_table()
+    participants_table_html = build_participants_table(participant_colors)
     case_index_html = build_case_index_section(case_ids)
 
     write_case_pages(participants, case_ids)

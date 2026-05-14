@@ -392,3 +392,12 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.participant-color-line {
+    display: inline-block;
+    width: 36px;
+    height: 4px;
+    margin-right: 8px;
+    vertical-align: middle;
+    border-radius: 2px;
+}
