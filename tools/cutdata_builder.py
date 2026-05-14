@@ -27,29 +27,19 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_label": "X [m]",
         "y_label": "Cp [-]",
         "filename_slug": "cp_vs_x",
-        "bins_filter": None,
+        "bins_filter": "BINS03",
     },
     {
         "plot_key": "htc_vs_s",
         "title": "HTC vs s",
-        "description": "Heat-transfer coefficient along the selected surface cut(s).",
+        "description": "Heat-transfer coefficient along the selected surface cut(s). The no-roughness HTC is plotted as the smooth roughness condition when available.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["HTC", "HeatTransferCoefficient"],
+        "clean_y_candidates": ["HTC_CLEAN", "HTC_Clean", "HTC_clean"],
         "x_label": "Surface distance from highlight [m]",
         "y_label": "Convective Heat Transfer [W/m2K]",
         "filename_slug": "htc_vs_s",
-        "bins_filter": None,
-    },
-    {
-        "plot_key": "htc_clean_vs_s",
-        "title": "HTC vs s W/O Roughness",
-        "description": "Heat-transfer coefficient along the selected surface cut(s) with no roughness applied.",
-        "x_candidates": ["s", "S"],
-        "y_candidates": ["HTC_CLEAN", "HTC_Clean", "HTC_clean"],
-        "x_label": "Surface distance from highlight [m]",
-        "y_label": "Convective Heat Transfer [W/m2K]",
-        "filename_slug": "htc_clean_vs_s",
-        "bins_filter": None,
+        "bins_filter": "BINS03",
     },
     {
         "plot_key": "beta_bins03_vs_s",
@@ -104,7 +94,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_label": "Surface distance from highlight [m]",
         "y_label": "Surface temperature [K]",
         "filename_slug": "surface_temperature_vs_s",
-        "bins_filter": None,
+        "bins_filter": "BINS03",
     },
     {
         "plot_key": "freezing_fraction_vs_s",
@@ -115,11 +105,9 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_label": "Surface distance from highlight [m]",
         "y_label": "Freezing fraction [-]",
         "filename_slug": "freezing_fraction_vs_s",
-        "bins_filter": None,
+        "bins_filter": "BINS03",
     },
 ]
-
-seen_trace_keys: set[tuple[str, str, str, str, float | None, str]] = set()
 
 BIN_LINE_DASHES = {
     "BINS03": "solid",
@@ -132,6 +120,60 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^a-z0-9]+", "_", text)
     return text.strip("_") or "figure"
 
+def extract_roughness_key_from_zone_name(zone_name: str) -> str:
+    text = zone_name.strip()
+
+    if re.search(r"(?:^|_)KS_(?:0|0p0|0\.0|smooth|none)(?:mm|m)?(?:_|$)", text, re.IGNORECASE):
+        return "smooth"
+
+    if re.search(r"(?:^|_)(?:VARIABLE_ROUGHNESS|VAR_ROUGHNESS|KS_VARIABLE|KS_VAR)(?:_|$)", text, re.IGNORECASE):
+        return "variable_roughness"
+
+    match = re.search(r"(?:^|_)KS_(?P<value>[0-9]+(?:p[0-9]+|\.[0-9]+)?)(?P<unit>mm|m)?(?:_|$)", text, re.IGNORECASE)
+    if match is not None:
+        value = match.group("value").replace("p", ".")
+        unit = (match.group("unit") or "mm").lower()
+
+        if unit == "m":
+            value_mm = float(value) * 1000.0
+            return f"{value_mm:g}mm"
+
+        return f"{float(value):g}mm"
+
+    return "unspecified_roughness"
+
+
+def format_roughness_title(roughness_key: str) -> str:
+    if roughness_key == "smooth":
+        return "No Roughness"
+
+    if roughness_key == "variable_roughness":
+        return "Variable roughness"
+
+    if roughness_key == "unspecified_roughness":
+        return "Roughness not specified"
+
+    if roughness_key.endswith("mm"):
+        value = roughness_key[:-2]
+        return f"Roughness height = {value} mm"
+
+    return roughness_key
+
+
+def roughness_sort_key(roughness_key: str) -> tuple[int, float, str]:
+    if roughness_key == "smooth":
+        return (0, 0.0, roughness_key)
+
+    if roughness_key.endswith("mm"):
+        try:
+            return (1, float(roughness_key[:-2]), roughness_key)
+        except ValueError:
+            pass
+
+    if roughness_key == "variable_roughness":
+        return (2, 0.0, roughness_key)
+
+    return (3, 0.0, roughness_key)
 
 def find_column_case_insensitive(columns, candidates: list[str]) -> str | None:
     lookup = {column.lower(): column for column in columns}
@@ -305,7 +347,9 @@ def collect_cutdata_slice_positions(participants, case_id: str, grid_level: str,
     return sorted(set(round(value, 8) for value in slice_positions))
 
 
-def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any], slice_filter: float | None = None) -> tuple[go.Figure, int, list[float], list[str]]:
+def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any], slice_filter: float | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float], list[str]]:
+    seen_trace_keys: set[tuple[str, str, str, str, float | None, str]] = set()
+
     fig = go.Figure()
     trace_count = 0
     slice_positions: list[float] = []
@@ -324,12 +368,29 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
             slice_position = None
             if zone_info is not None:
                 slice_position = decode_slice_position(zone_info["slice"])
+
             if not slice_matches_filter(slice_position, slice_filter):
                 continue
+
+            roughness_key = extract_roughness_key_from_zone_name(zone_name)
+
+            use_clean_htc = (
+                plot_spec.get("plot_key") == "htc_vs_s"
+                and roughness_filter == "smooth"
+            )
+
+            if use_clean_htc:
+                roughness_key = "smooth"
+            else:
+                if roughness_filter is not None and roughness_key != roughness_filter:
+                    continue
             if slice_position is not None:
                 slice_positions.append(slice_position)
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
-            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+            if use_clean_htc:
+                y_column = find_column_case_insensitive(zone.data.columns, plot_spec.get("clean_y_candidates", []))
+            else:
+                y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
             if x_column is None or y_column is None:
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide {plot_spec['y_candidates'][0]}.")
                 continue
@@ -346,6 +407,11 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                     slice_text = f"Y = {slice_value:g} m"
             
             ##Adding traces color
+            if use_clean_htc:
+                zone_identity = "HTC_CLEAN"
+            else:
+                zone_identity = zone_name
+
             trace_key = (
                 participant.participant_id,
                 dataset_data.dataset_id,
@@ -353,12 +419,10 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                 grid_level,
                 round(slice_position, 8) if slice_position is not None else None,
                 plot_spec["plot_key"],
+                bins_id or "",
+                roughness_key,
+                zone_identity,
             )
-
-            if bins_id is not None:
-                trace_key = trace_key + (bins_id,)
-            else:
-                trace_key = trace_key + ("",)
 
             if trace_key in seen_trace_keys:
                 continue
@@ -375,6 +439,7 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                     line=dict(color=color),
                     hovertemplate=(
                         f"Participant: {escape(trace_name)}<br>"
+                        f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
                         f"Case: {escape(case_id)}<br>"
                         f"Grid: {escape(grid_level)}<br>"
                         f"Bins: {escape(bins_id or 'not specified')}<br>"
@@ -512,34 +577,61 @@ def build_combined_beta_section(participants, case_id: str, grid_level: str) -> 
 
 def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any]) -> str:
     slice_positions = collect_cutdata_slice_positions(participants, case_id, grid_level, bins_filter=plot_spec.get("bins_filter"))
+
     if not slice_positions:
         slice_positions = [None]
 
     figures_html = ""
     all_skipped_notes: list[str] = []
+
     for slice_position in slice_positions:
-        fig, trace_count, figure_slice_positions, skipped_notes = build_cutdata_figure(participants, case_id, grid_level, plot_spec, slice_filter=slice_position)
-        all_skipped_notes.extend(skipped_notes)
-        slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
-        if trace_count == 0:
-            figure_html = empty_placeholder(title=f"{plot_spec['title']} | {slice_title}", message="No matching cutData variables were found yet for this case/grid level and slice.")
-        else:
-            slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
-            filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}"
-            figure_html = figure_to_html_div(fig, filename=filename)
-        figures_html += f"""
-        <section class="slice-plot-group">
-          <h5>{escape(slice_title)}</h5>
-          <div class="plot-container">
-            {figure_html}
-          </div>
-        </section>
-        """
+        roughness_keys = collect_cutdata_roughness_keys(participants, case_id, grid_level, plot_spec, slice_filter=slice_position)
+
+        if not roughness_keys:
+            roughness_keys = [None]
+
+        for roughness_key in roughness_keys:
+            fig, trace_count, figure_slice_positions, skipped_notes = build_cutdata_figure(
+                participants,
+                case_id,
+                grid_level,
+                plot_spec,
+                slice_filter=slice_position,
+                roughness_filter=roughness_key,
+            )
+
+            all_skipped_notes.extend(skipped_notes)
+
+            slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
+            roughness_title = format_roughness_title(roughness_key) if roughness_key is not None else "Roughness not specified"
+            full_title = f"{slice_title} | {roughness_title}"
+
+            if trace_count == 0:
+                figure_html = empty_placeholder(
+                    title=f"{plot_spec['title']} | {full_title}",
+                    message="No matching cutData variables were found yet for this case/grid level, slice, and roughness.",
+                )
+            else:
+                slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
+                roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
+                filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}{roughness_slug}"
+                figure_html = figure_to_html_div(fig, filename=filename)
+
+            figures_html += f"""
+            <section class="slice-plot-group">
+              <h5>{escape(full_title)}</h5>
+              <div class="plot-container">
+                {figure_html}
+              </div>
+            </section>
+            """
 
     description = build_plot_description(plot_spec, [value for value in slice_positions if value is not None])
+
     notes_html = ""
     if all_skipped_notes:
         notes_html = '<ul class="plot-notes">' + "".join(f"<li>{escape(note)}</li>" for note in sorted(set(all_skipped_notes))) + "</ul>"
+
     return f"""
     <section class="plot-subsection">
       <h4>{escape(plot_spec["title"])}</h4>
@@ -558,3 +650,47 @@ def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) 
         else:
             html += build_plot_subsection(participants, case_id, grid_level, plot_spec)
     return html
+
+def collect_cutdata_roughness_keys(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any], slice_filter: float | None = None) -> list[str]:
+    roughness_keys: set[str] = set()
+    bins_filter = plot_spec.get("bins_filter")
+
+    for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
+        if dataset_data.cut_data is None:
+            continue
+
+        for zone_name, zone in dataset_data.cut_data.zones.items():
+            zone_info = parse_ipw3_zone_name(zone_name)
+            bins_id = zone_info["bins"] if zone_info is not None else None
+
+            if bins_filter is not None and bins_id != bins_filter:
+                continue
+
+            slice_position = None
+            if zone_info is not None:
+                slice_position = decode_slice_position(zone_info["slice"])
+
+            if not slice_matches_filter(slice_position, slice_filter):
+                continue
+
+            x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+
+            if x_column is None:
+                continue
+
+            clean_y_column = None
+            if plot_spec.get("plot_key") == "htc_vs_s":
+                clean_y_column = find_column_case_insensitive(zone.data.columns, plot_spec.get("clean_y_candidates", []))
+
+            if clean_y_column is not None:
+                roughness_keys.add("smooth")
+
+            if y_column is not None:
+                roughness_keys.add(extract_roughness_key_from_zone_name(zone_name))
+
+    preferred_order = ["smooth", "0.5mm", "1mm", "1.5mm", "variable_roughness", "unspecified_roughness"]
+    ordered = [key for key in preferred_order if key in roughness_keys]
+    remaining = sorted(roughness_keys - set(ordered), key=roughness_sort_key)
+
+    return ordered + remaining
