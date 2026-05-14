@@ -964,7 +964,12 @@ def parse_cfd_grid_convergence_sheet(result: TecplotData, sheet_name: str, rows:
                         parsed_row[column_name] = cell_value
 
                 if any(parsed_row[column] != -999.0 for column in ["CL", "CD", "CMX", "CMY", "CMZ"]):
-                    roughness_key = f"{roughness:g}mm" if roughness >= 0.0 else "variable_roughness"
+                    if roughness == 0.0:
+                        roughness_key = "smooth"
+                    elif roughness < 0.0:
+                        roughness_key = "variable_roughness"
+                    else:
+                        roughness_key = f"{roughness:g}mm"
                     rows_by_roughness.setdefault(roughness_key, []).append(parsed_row)
 
             data_index += 1

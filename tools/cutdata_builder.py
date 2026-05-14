@@ -9,6 +9,7 @@ import re
 import plotly.graph_objects as go
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
+from .participant_style import participant_color
 
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
@@ -118,6 +119,13 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     },
 ]
 
+seen_trace_keys: set[tuple[str, str, str, str, float | None, str]] = set()
+
+BIN_LINE_DASHES = {
+    "BINS03": "solid",
+    "BINS07": "dash",
+    "BINS15": "dot",
+}
 
 def slugify(text: str) -> str:
     text = text.strip().lower()
@@ -336,7 +344,47 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                 slice_value = decode_slice_position(zone_info["slice"])
                 if slice_value is not None:
                     slice_text = f"Y = {slice_value:g} m"
-            fig.add_trace(go.Scatter(x=data[x_column], y=data[y_column], mode="lines", name=trace_name, legendgroup=trace_name, hovertemplate=(f"Participant: {escape(trace_name)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Bins: {escape(bins_id or 'not specified')}<br>" f"Slice: {escape(slice_text)}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_column)}=%{{x}}<br>" f"{escape(y_column)}=%{{y}}<extra></extra>")))
+            
+            ##Adding traces color
+            trace_key = (
+                participant.participant_id,
+                dataset_data.dataset_id,
+                case_id,
+                grid_level,
+                round(slice_position, 8) if slice_position is not None else None,
+                plot_spec["plot_key"],
+            )
+
+            if bins_id is not None:
+                trace_key = trace_key + (bins_id,)
+            else:
+                trace_key = trace_key + ("",)
+
+            if trace_key in seen_trace_keys:
+                continue
+
+            seen_trace_keys.add(trace_key)
+            color = participant_color(participant.participant_id)
+            fig.add_trace(
+                go.Scatter(
+                    x=data[x_column],
+                    y=data[y_column],
+                    mode="lines",
+                    name=trace_name,
+                    legendgroup=trace_name,
+                    line=dict(color=color),
+                    hovertemplate=(
+                        f"Participant: {escape(trace_name)}<br>"
+                        f"Case: {escape(case_id)}<br>"
+                        f"Grid: {escape(grid_level)}<br>"
+                        f"Bins: {escape(bins_id or 'not specified')}<br>"
+                        f"Slice: {escape(slice_text)}<br>"
+                        f"Zone: {escape(zone_name)}<br>"
+                        f"{escape(x_column)}=%{{x}}<br>"
+                        f"{escape(y_column)}=%{{y}}<extra></extra>"
+                    ),
+                )
+            )
             trace_count += 1
 
     trace_count += add_reference_traces(fig, case_id, grid_level, plot_spec["plot_key"])
@@ -361,6 +409,7 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
     trace_count = 0
     slice_positions: list[float] = []
     label = participant_label(participant, dataset_data)
+    color = participant_color(participant.participant_id)
     grouped_zones = get_cutdata_zones_by_bins(dataset_data)
 
     for bins_id in BETA_BINS:
@@ -378,7 +427,26 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
             if slice_position is not None:
                 slice_positions.append(slice_position)
             slice_text = f"Y = {slice_position:g} m" if slice_position is not None else "unknown"
-            fig.add_trace(go.Scatter(x=data[x_column], y=data[y_column], mode="lines", name=label, legendgroup=label, showlegend=(trace_count == 0), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Bins: {escape(bins_id)}<br>" f"Slice: {escape(slice_text)}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_column)}=%{{x}}<br>" f"{escape(y_column)}=%{{y}}<extra></extra>")))
+            fig.add_trace(
+                go.Scatter(
+                    x=data[x_column],
+                    y=data[y_column],
+                    mode="lines",
+                    name=bins_id,
+                    legendgroup=bins_id,
+                    line=dict(color=color, dash=BIN_LINE_DASHES.get(bins_id, "solid")),
+                    hovertemplate=(
+                        f"Participant: {escape(label)}<br>"
+                        f"Case: {escape(case_id)}<br>"
+                        f"Grid: {escape(grid_level)}<br>"
+                        f"Bins: {escape(bins_id)}<br>"
+                        f"Slice: {escape(slice_text)}<br>"
+                        f"Zone: {escape(zone_name)}<br>"
+                        f"{escape(x_column)}=%{{x}}<br>"
+                        f"{escape(y_column)}=%{{y}}<extra></extra>"
+                    ),
+                )
+            )
             trace_count += 1
 
     if trace_count == 0:

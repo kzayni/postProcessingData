@@ -21,6 +21,7 @@ from tools.gatherParticipantData import CASE_SLICES, VALID_CASES, VALID_GRID_LEV
 from tools.cutdata_builder import build_grid_level_cutdata_plots
 from tools.iceshape_builder import build_ice_shape_section
 from tools.convergence_data_builder import build_grid_convergence_section
+from tools.participant_style import PARTICIPANT_COLORS
 
 ROOT_DIR = Path(".")
 OUTPUT_HTML = ROOT_DIR / "index.html"
@@ -415,14 +416,10 @@ def main() -> None:
         "TC_ONERAM6": (0.0, None, 0.0),
     }
     
-    participant_colors = {
-        "001": "blue",
-    }
-
     participants = load_participants(ROOT_DIR, highlight_points_by_case=highlight_points_by_case, clean_s_cache=args.clean)
     case_ids = get_case_ids(participants)
 
-    participants_table_html = build_participants_table(participant_colors)
+    participants_table_html = build_participants_table(PARTICIPANT_COLORS)
     case_index_html = build_case_index_section(case_ids)
 
     write_case_pages(participants, case_ids)
