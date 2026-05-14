@@ -6,7 +6,7 @@ import re
 
 import plotly.graph_objects as go
 
-from .gatherParticipantData import decode_slice_position, iter_grid_datasets
+from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
 
 
 def slugify(text: str) -> str:
@@ -92,32 +92,54 @@ def iter_grid_data(participants, case_id: str, grid_level: str):
 
 def parse_ipw3_ice_shape_zone_name(zone_name: str) -> dict[str, str] | None:
     zone_name = zone_name.strip()
-    slice_pattern = re.compile(r"^SLICE_Y_(?P<slice>.+?)(?:_(?P<bins>BINS\d+))?_(?P<dataset>D\d+)(?:_(?P<layer>L\d+|LAYER\d+))?$", re.IGNORECASE)
-    mccs_pattern = re.compile(r"^MCCS(?:_(?P<bins>BINS\d+))?_(?P<dataset>D\d+)(?:_(?P<layer>L\d+|LAYER\d+))?$", re.IGNORECASE)
+    slice_pattern = re.compile(r"^SLICE_Y_(?P<slice>.+?)(?:_(?P<bins>BINS\d+))?(?:_(?P<tail>.*))?$", re.IGNORECASE)
+    mccs_pattern = re.compile(r"^MCCS(?:_(?P<bins>BINS\d+))?(?:_(?P<tail>.*))?$", re.IGNORECASE)
 
     match = slice_pattern.match(zone_name)
     if match is not None:
+        tail = match.group("tail") or ""
+        dataset_match = re.search(r"(?:^|_)(D\d+)(?:_|$)", tail, re.IGNORECASE)
+        layer_match = re.search(r"(?:^|_)(L\d+|LAYER\d+)(?:_|$)", tail, re.IGNORECASE)
         return {
             "type": "SLICE",
             "slice": match.group("slice"),
             "bins": (match.group("bins") or "BINSXX").upper(),
-            "dataset": match.group("dataset").upper(),
-            "layer": (match.group("layer") or "").upper(),
+            "dataset": dataset_match.group(1).upper() if dataset_match is not None else "DXX",
+            "layer": layer_match.group(1).upper() if layer_match is not None else "",
         }
 
     match = mccs_pattern.match(zone_name)
     if match is not None:
+        tail = match.group("tail") or ""
+        dataset_match = re.search(r"(?:^|_)(D\d+)(?:_|$)", tail, re.IGNORECASE)
+        layer_match = re.search(r"(?:^|_)(L\d+|LAYER\d+)(?:_|$)", tail, re.IGNORECASE)
         return {
             "type": "MCCS",
             "slice": "",
             "bins": (match.group("bins") or "BINSXX").upper(),
-            "dataset": match.group("dataset").upper(),
-            "layer": (match.group("layer") or "").upper(),
+            "dataset": dataset_match.group(1).upper() if dataset_match is not None else "DXX",
+            "layer": layer_match.group(1).upper() if layer_match is not None else "",
         }
 
     return None
 
-def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: str) -> tuple[go.Figure, int, list[float]]:
+
+def slice_matches_filter(slice_position: float | None, slice_filter: float | None, tolerance: float = 1.0e-6) -> bool:
+    if slice_filter is None:
+        return True
+    if slice_position is None:
+        return False
+    return abs(slice_position - slice_filter) <= tolerance
+
+
+def expected_slice_positions(case_id: str) -> list[float | None]:
+    slices = CASE_SLICES.get(case_id)
+    if not slices:
+        return [None]
+    return sorted(set(round(value, 8) for value in slices))
+
+
+def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None) -> tuple[go.Figure, int, list[float]]:
     """Build the single-layer/final ice-shape figure from cutData files.
 
     Important distinction:
@@ -152,11 +174,11 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
             if zone_info is not None:
                 bins_id = zone_info["bins"]
                 shape_type = zone_info["type"]
+                slice_position = None
 
                 if zone_info["slice"]:
                     slice_position = decode_slice_position(zone_info["slice"])
                     if slice_position is not None:
-                        slice_positions.append(slice_position)
                         slice_text = f"Y = {slice_position:g} m"
                     else:
                         slice_text = zone_info["slice"]
@@ -166,6 +188,12 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 bins_id = "not specified"
                 shape_type = "cutData"
                 slice_text = "unknown"
+                slice_position = None
+
+            if not slice_matches_filter(slice_position, slice_filter):
+                continue
+            if slice_position is not None:
+                slice_positions.append(slice_position)
 
             # Clean coordinates from cutData.
             x_clean_column = find_column_case_insensitive(cut_zone.data.columns, ["X", "CoordinateX"])
@@ -181,7 +209,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 continue
 
             # Draw the clean shape once per participant/dataset.
-            clean_group = f"{label}_clean_cutdata"
+            clean_group = f"{label}_clean_cutdata_{slice_filter}"
 
             if x_clean_column is not None and z_clean_column is not None and clean_group not in clean_legend_groups:
                 fig.add_trace(
@@ -241,7 +269,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
     return fig, trace_count, slice_positions
 
 
-def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: str) -> tuple[go.Figure, int, list[float]]:
+def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None) -> tuple[go.Figure, int, list[float]]:
     fig = go.Figure()
     trace_count = 0
     slice_positions: list[float] = []
@@ -262,10 +290,10 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 bins_id = zone_info["bins"]
                 shape_type = zone_info["type"]
                 layer_id = zone_info["layer"] or f"zone {zone_index}"
+                slice_position = None
                 if zone_info["slice"]:
                     slice_position = decode_slice_position(zone_info["slice"])
                     if slice_position is not None:
-                        slice_positions.append(slice_position)
                         slice_text = f"Y = {slice_position:g} m"
                     else:
                         slice_text = zone_info["slice"]
@@ -276,6 +304,12 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 shape_type = "unknown"
                 layer_id = f"zone {zone_index}"
                 slice_text = "unknown"
+                slice_position = None
+
+            if not slice_matches_filter(slice_position, slice_filter):
+                continue
+            if slice_position is not None:
+                slice_positions.append(slice_position)
 
             x_clean_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
             z_clean_column = find_column_case_insensitive(zone.data.columns, ["Z", "CoordinateZ"])
@@ -285,7 +319,7 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
             if x_iced_column is None or z_iced_column is None:
                 continue
 
-            clean_group = f"{label}_clean"
+            clean_group = f"{label}_clean_{slice_filter}"
             if x_clean_column is not None and z_clean_column is not None and clean_group not in clean_legend_groups:
                 fig.add_trace(go.Scatter(x=zone.data[x_clean_column], y=zone.data[z_clean_column], mode="lines", name=f"{label} clean", legendgroup=clean_group, line=dict(dash="dash"), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape: clean<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_clean_column)}=%{{x}}<br>" f"{escape(z_clean_column)}=%{{y}}<extra></extra>")))
                 clean_legend_groups.add(clean_group)
@@ -308,48 +342,65 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         2. Multi-layer/final ice shape from finalIceShape / iceShape.
     """
 
-    # ------------------------------------------------------------------
-    # Single-layer ice shape from cutData
-    # ------------------------------------------------------------------
+    single_figures_html = ""
+    multi_figures_html = ""
+    configured_slices = expected_slice_positions(case_id)
 
-    single_fig, single_trace_count, single_slice_positions = build_single_layer_ice_shape_figure(participants, case_id, grid_level)
+    for slice_position in configured_slices:
+        slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
+        slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
 
-    if single_trace_count == 0:
-        single_figure_html = empty_placeholder(
-            title="Single-layer ice shape",
-            message="No matching cutData iced coordinates were found yet for this case/grid level.",
-        )
-    else:
-        single_filename = f"{slugify(case_id)}_{grid_level}_single_layer_ice_shape"
-        single_figure_html = figure_to_html_div(single_fig, filename=single_filename)
+        single_fig, single_trace_count, single_slice_positions = build_single_layer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position)
+        if single_trace_count == 0:
+            single_figure_html = empty_placeholder(
+                title=f"Single-layer ice shape | {slice_title}",
+                message="No matching cutData iced coordinates were found yet for this case/grid level and slice.",
+            )
+        else:
+            single_filename = f"{slugify(case_id)}_{grid_level}_single_layer_ice_shape{slice_slug}"
+            single_figure_html = figure_to_html_div(single_fig, filename=single_filename)
 
+        single_figures_html += f"""
+        <section class="slice-plot-group">
+          <h5>{escape(slice_title)}</h5>
+          <div class="plot-container">
+            {single_figure_html}
+          </div>
+        </section>
+        """
+
+        multi_fig, multi_trace_count, multi_slice_positions = build_multilayer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position)
+        if multi_trace_count == 0:
+            multi_figure_html = empty_placeholder(
+                title=f"Multi-layer final ice shape | {slice_title}",
+                message="No matching finalIceShape variables were found yet for this case/grid level and slice.",
+            )
+        else:
+            multi_filename = f"{slugify(case_id)}_{grid_level}_multilayer_ice_shape{slice_slug}"
+            multi_figure_html = figure_to_html_div(multi_fig, filename=multi_filename)
+
+        multi_figures_html += f"""
+        <section class="slice-plot-group">
+          <h5>{escape(slice_title)}</h5>
+          <div class="plot-container">
+            {multi_figure_html}
+          </div>
+        </section>
+        """
+
+    configured_slice_text = format_slice_positions([value for value in configured_slices if value is not None])
     single_description = (
         "Single-layer ice-shape comparison extracted from cutData. "
         "The clean shape is drawn using X-Z, and the iced shape is drawn using X_ICED-Z_ICED from the cutData file. "
-        f"Slice location(s): {format_slice_positions(single_slice_positions)}. "
+        f"Slice location(s): {configured_slice_text}. "
         "Legend: PID.DID."
     )
-
-    # ------------------------------------------------------------------
-    # Multi-layer/final ice shape from finalIceShape / iceShape
-    # ------------------------------------------------------------------
-
-    multi_fig, multi_trace_count, multi_slice_positions = build_multilayer_ice_shape_figure(participants, case_id, grid_level)
-
-    if multi_trace_count == 0:
-        multi_figure_html = empty_placeholder(
-            title="Multi-layer final ice shape",
-            message="No matching finalIceShape variables were found yet for this case/grid level.",
-        )
-    else:
-        multi_filename = f"{slugify(case_id)}_{grid_level}_multilayer_ice_shape"
-        multi_figure_html = figure_to_html_div(multi_fig, filename=multi_filename)
 
     multi_description = (
         "Multi-layer or final ice-shape comparison extracted from finalIceShape / iceShape files. "
         "Each finalIceShape zone is drawn as one X-Z curve, so if one layer is stored per zone, "
         "the figure overlays all submitted layers. "
-        f"Slice location(s): {format_slice_positions(multi_slice_positions)}. "
+        f"Slice location(s): {configured_slice_text}. "
         "Legend: PID.DID and layer/zone index."
     )
 
@@ -357,16 +408,12 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     <section class="plot-subsection ice-shape-subsection">
       <h4>Single-layer ice shape</h4>
       <p class="plot-description">{escape(single_description)}</p>
-      <div class="plot-container">
-        {single_figure_html}
-      </div>
+      {single_figures_html}
     </section>
 
     <section class="plot-subsection ice-shape-subsection">
       <h4>Multi-layer final ice shape</h4>
       <p class="plot-description">{escape(multi_description)}</p>
-      <div class="plot-container">
-        {multi_figure_html}
-      </div>
+      {multi_figures_html}
     </section>
     """

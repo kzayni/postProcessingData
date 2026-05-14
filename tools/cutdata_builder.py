@@ -8,7 +8,7 @@ import re
 
 import plotly.graph_objects as go
 
-from .gatherParticipantData import decode_slice_position, iter_grid_datasets
+from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
 
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
@@ -165,11 +165,15 @@ def empty_placeholder(title: str, message: str) -> str:
 
 
 def parse_ipw3_zone_name(zone_name: str) -> dict[str, str] | None:
-    pattern = re.compile(r"^SLICE_Y_(?P<slice>.+?)_(?P<bins>BINS\d+)_(?P<dataset>D\d+)$", re.IGNORECASE)
+    pattern = re.compile(r"^SLICE_Y_(?P<slice>.+?)_(?P<bins>BINS\d+)(?:_(?P<tail>.*))?$", re.IGNORECASE)
     match = pattern.match(zone_name.strip())
     if match is None:
         return None
-    return {"slice": match.group("slice"), "bins": match.group("bins").upper(), "dataset": match.group("dataset").upper()}
+
+    tail = match.group("tail") or ""
+    dataset_match = re.search(r"(?:^|_)(D\d+)(?:_|$)", tail, re.IGNORECASE)
+    dataset_id = dataset_match.group(1).upper() if dataset_match is not None else "DXX"
+    return {"slice": match.group("slice"), "bins": match.group("bins").upper(), "dataset": dataset_id}
 
 
 def format_slice_positions(slice_values: list[float]) -> str:
@@ -262,11 +266,43 @@ def add_reference_traces(fig: go.Figure, case_id: str, grid_level: str, plot_key
     return trace_count
 
 
-def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any]) -> tuple[go.Figure, int, list[float], list[str]]:
+def slice_matches_filter(slice_position: float | None, slice_filter: float | None, tolerance: float = 1.0e-6) -> bool:
+    if slice_filter is None:
+        return True
+    if slice_position is None:
+        return False
+    return abs(slice_position - slice_filter) <= tolerance
+
+
+def collect_cutdata_slice_positions(participants, case_id: str, grid_level: str, bins_filter: str | None = None) -> list[float]:
+    expected_slices = CASE_SLICES.get(case_id)
+    if expected_slices:
+        return sorted(set(round(value, 8) for value in expected_slices))
+
+    slice_positions: list[float] = []
+
+    for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
+        if dataset_data.cut_data is None:
+            continue
+        for zone_name in dataset_data.cut_data.zones:
+            zone_info = parse_ipw3_zone_name(zone_name)
+            if zone_info is None:
+                continue
+            if bins_filter is not None and zone_info["bins"] != bins_filter:
+                continue
+            slice_position = decode_slice_position(zone_info["slice"])
+            if slice_position is not None:
+                slice_positions.append(slice_position)
+
+    return sorted(set(round(value, 8) for value in slice_positions))
+
+
+def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any], slice_filter: float | None = None) -> tuple[go.Figure, int, list[float], list[str]]:
     fig = go.Figure()
     trace_count = 0
     slice_positions: list[float] = []
     skipped_notes: list[str] = []
+    skipped_note_set: set[str] = set()
     bins_filter = plot_spec.get("bins_filter")
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
@@ -277,14 +313,22 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
             bins_id = zone_info["bins"] if zone_info is not None else None
             if bins_filter is not None and bins_id != bins_filter:
                 continue
+            slice_position = None
             if zone_info is not None:
                 slice_position = decode_slice_position(zone_info["slice"])
-                if slice_position is not None:
-                    slice_positions.append(slice_position)
+            if not slice_matches_filter(slice_position, slice_filter):
+                continue
+            if slice_position is not None:
+                slice_positions.append(slice_position)
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
             y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
             if x_column is None or y_column is None:
-                skipped_notes.append(f"{participant_label(participant, dataset_data)}: missing columns for {plot_spec['title']}")
+                skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide {plot_spec['y_candidates'][0]}.")
+                continue
+            data = zone.data[[x_column, y_column]].copy()
+            data = data[(data[x_column] != -999.0) & (data[y_column] != -999.0)]
+            if data.empty:
+                skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
             trace_name = participant_label(participant, dataset_data)
             slice_text = "unknown"
@@ -292,11 +336,12 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                 slice_value = decode_slice_position(zone_info["slice"])
                 if slice_value is not None:
                     slice_text = f"Y = {slice_value:g} m"
-            fig.add_trace(go.Scatter(x=zone.data[x_column], y=zone.data[y_column], mode="lines", name=trace_name, legendgroup=trace_name, hovertemplate=(f"Participant: {escape(trace_name)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Bins: {escape(bins_id or 'not specified')}<br>" f"Slice: {escape(slice_text)}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_column)}=%{{x}}<br>" f"{escape(y_column)}=%{{y}}<extra></extra>")))
+            fig.add_trace(go.Scatter(x=data[x_column], y=data[y_column], mode="lines", name=trace_name, legendgroup=trace_name, hovertemplate=(f"Participant: {escape(trace_name)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Bins: {escape(bins_id or 'not specified')}<br>" f"Slice: {escape(slice_text)}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_column)}=%{{x}}<br>" f"{escape(y_column)}=%{{y}}<extra></extra>")))
             trace_count += 1
 
     trace_count += add_reference_traces(fig, case_id, grid_level, plot_spec["plot_key"])
     style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    skipped_notes = sorted(skipped_note_set)
     return fig, trace_count, slice_positions, skipped_notes
 
 
@@ -311,7 +356,7 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
     return " ".join(details)
 
 
-def build_participant_combined_beta_figure(participant, dataset_data, case_id: str, grid_level: str, grid_data) -> tuple[str, int, list[float]]:
+def build_participant_combined_beta_figure(participant, dataset_data, case_id: str, grid_level: str, grid_data, slice_filter: float | None = None) -> tuple[str, int, list[float]]:
     fig = go.Figure()
     trace_count = 0
     slice_positions: list[float] = []
@@ -320,33 +365,41 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
 
     for bins_id in BETA_BINS:
         for zone_name, zone, slice_position in grouped_zones[bins_id]:
+            if not slice_matches_filter(slice_position, slice_filter):
+                continue
             x_column = find_column_case_insensitive(zone.data.columns, ["s", "S"])
             y_column = find_column_case_insensitive(zone.data.columns, ["Beta", "BETA", "CollectionEfficiency"])
             if x_column is None or y_column is None:
                 continue
+            data = zone.data[[x_column, y_column]].copy()
+            data = data[(data[x_column] != -999.0) & (data[y_column] != -999.0)]
+            if data.empty:
+                continue
             if slice_position is not None:
                 slice_positions.append(slice_position)
             slice_text = f"Y = {slice_position:g} m" if slice_position is not None else "unknown"
-            fig.add_trace(go.Scatter(x=zone.data[x_column], y=zone.data[y_column], mode="lines", name=label, legendgroup=label, showlegend=(trace_count == 0), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Bins: {escape(bins_id)}<br>" f"Slice: {escape(slice_text)}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_column)}=%{{x}}<br>" f"{escape(y_column)}=%{{y}}<extra></extra>")))
+            fig.add_trace(go.Scatter(x=data[x_column], y=data[y_column], mode="lines", name=label, legendgroup=label, showlegend=(trace_count == 0), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Bins: {escape(bins_id)}<br>" f"Slice: {escape(slice_text)}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_column)}=%{{x}}<br>" f"{escape(y_column)}=%{{y}}<extra></extra>")))
             trace_count += 1
 
     if trace_count == 0:
         return "", 0, slice_positions
     style_xy_figure(fig, "s [m]", "Beta [-]", height=420, legend_right=False)
     fig.update_layout(margin=dict(l=70, r=25, t=20, b=60), legend=dict(orientation="h", x=0.0, y=1.12))
-    filename = f"{slugify(case_id)}_{grid_level}_{participant.participant_id}_{dataset_data.dataset_id}_combined_beta"
+    slice_slug = f"_slice_{slice_filter:g}".replace(".", "p") if slice_filter is not None else ""
+    filename = f"{slugify(case_id)}_{grid_level}_{participant.participant_id}_{dataset_data.dataset_id}{slice_slug}_combined_beta"
     return figure_to_html_div(fig, filename=filename), trace_count, slice_positions
 
 
-def build_combined_beta_card(participant, dataset_data, case_id: str, grid_level: str, grid_data) -> str:
+def build_combined_beta_card(participant, dataset_data, case_id: str, grid_level: str, grid_data, slice_filter: float | None = None) -> str:
     participant_id = participant_label(participant, dataset_data)
-    figure_html, trace_count, slice_positions = build_participant_combined_beta_figure(participant, dataset_data, case_id, grid_level, grid_data)
+    figure_html, trace_count, slice_positions = build_participant_combined_beta_figure(participant, dataset_data, case_id, grid_level, grid_data, slice_filter=slice_filter)
     if trace_count == 0:
         return ""
+    slice_title = f" | Y = {slice_filter:g} m" if slice_filter is not None else ""
     details = f"Legend: {participant_id}. Case: {case_id}. Grid level: {grid_level}. Slice location(s): {format_slice_positions(slice_positions)}. Curves included when available: BINS03, BINS07, and BINS15."
     return f"""
     <article class="combined-beta-card">
-      <h4>{escape(participant_id)}</h4>
+      <h4>{escape(participant_id + slice_title)}</h4>
       <p class="plot-description">{escape(details)}</p>
       <div class="plot-container combined-beta-figure">
         {figure_html}
@@ -356,11 +409,24 @@ def build_combined_beta_card(participant, dataset_data, case_id: str, grid_level
 
 
 def build_combined_beta_section(participants, case_id: str, grid_level: str) -> str:
+    slice_positions = collect_cutdata_slice_positions(participants, case_id, grid_level)
+    if not slice_positions:
+        slice_positions = [None]
     cards_html = ""
-    for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
-        if dataset_data.cut_data is None:
-            continue
-        cards_html += build_combined_beta_card(participant, dataset_data, case_id, grid_level, grid_data)
+    for slice_position in slice_positions:
+        slice_cards_html = ""
+        for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
+            if dataset_data.cut_data is None:
+                continue
+            slice_cards_html += build_combined_beta_card(participant, dataset_data, case_id, grid_level, grid_data, slice_filter=slice_position)
+        if slice_cards_html:
+            slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
+            cards_html += f"""
+            <section class="slice-plot-group">
+              <h5>{escape(slice_title)}</h5>
+              {slice_cards_html}
+            </section>
+            """
     if not cards_html:
         cards_html = empty_placeholder(title="Combined Beta", message="No matching cutData variables were found yet for this case/grid level.")
     return f"""
@@ -377,20 +443,41 @@ def build_combined_beta_section(participants, case_id: str, grid_level: str) -> 
 
 
 def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any]) -> str:
-    fig, trace_count, slice_positions, skipped_notes = build_cutdata_figure(participants, case_id, grid_level, plot_spec)
-    description = build_plot_description(plot_spec, slice_positions)
-    if trace_count == 0:
-        figure_html = empty_placeholder(title=plot_spec["title"], message="No matching cutData variables were found yet for this case/grid level.")
-    else:
-        filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}"
-        figure_html = figure_to_html_div(fig, filename=filename)
+    slice_positions = collect_cutdata_slice_positions(participants, case_id, grid_level, bins_filter=plot_spec.get("bins_filter"))
+    if not slice_positions:
+        slice_positions = [None]
+
+    figures_html = ""
+    all_skipped_notes: list[str] = []
+    for slice_position in slice_positions:
+        fig, trace_count, figure_slice_positions, skipped_notes = build_cutdata_figure(participants, case_id, grid_level, plot_spec, slice_filter=slice_position)
+        all_skipped_notes.extend(skipped_notes)
+        slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
+        if trace_count == 0:
+            figure_html = empty_placeholder(title=f"{plot_spec['title']} | {slice_title}", message="No matching cutData variables were found yet for this case/grid level and slice.")
+        else:
+            slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
+            filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}"
+            figure_html = figure_to_html_div(fig, filename=filename)
+        figures_html += f"""
+        <section class="slice-plot-group">
+          <h5>{escape(slice_title)}</h5>
+          <div class="plot-container">
+            {figure_html}
+          </div>
+        </section>
+        """
+
+    description = build_plot_description(plot_spec, [value for value in slice_positions if value is not None])
+    notes_html = ""
+    if all_skipped_notes:
+        notes_html = '<ul class="plot-notes">' + "".join(f"<li>{escape(note)}</li>" for note in sorted(set(all_skipped_notes))) + "</ul>"
     return f"""
     <section class="plot-subsection">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">{escape(description)}</p>
-      <div class="plot-container">
-        {figure_html}
-      </div>
+      {notes_html}
+      {figures_html}
     </section>
     """
 
