@@ -187,38 +187,38 @@
     
     <section class="plot-subsection ice-shape-subsection">
       <h4>Single-layer ice shape</h4>
-      <p class="plot-description">Single-layer ice-shape comparison extracted from cutData. The clean shape is drawn using X-Z, and the iced shape is drawn using X_ICED-Z_ICED from the cutData file. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
+      <p class="plot-description">Single-layer ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain SINGLE_LAYER. The clean reference shape is drawn from R00_REFERENCE, and submitted ice shapes are drawn using X_ICED-Z_ICED. Slice location(s): Y = 0.9144 m. Bin set(s): BINSXX. Legend: PID.DID, bin set, and layer type.</p>
       
-        <section class="slice-plot-group">
-          <h5>Y = 0.9144 m</h5>
-          <div class="plot-container">
-            
+            <section class="slice-plot-group">
+              <h5>Y = 0.9144 m | BINSXX</h5>
+              <div class="plot-container">
+                
     <div class="placeholder-card">
-      <h4>Single-layer ice shape | Y = 0.9144 m</h4>
-      <p>No matching cutData iced coordinates were found yet for this case/grid level and slice.</p>
+      <h4>Single-layer ice shape | Y = 0.9144 m | BINSXX</h4>
+      <p>No matching SINGLE_LAYER iceShape zones were found yet for this case/grid level, slice, and bin set.</p>
     </div>
     
-          </div>
-        </section>
-        
+              </div>
+            </section>
+            
     </section>
 
     <section class="plot-subsection ice-shape-subsection">
       <h4>Multi-layer final ice shape</h4>
-      <p class="plot-description">Multi-layer or final ice-shape comparison extracted from finalIceShape / iceShape files. Each finalIceShape zone is drawn as one X-Z curve, so if one layer is stored per zone, the figure overlays all submitted layers. Slice location(s): Y = 0.9144 m. Legend: PID.DID and layer/zone index.</p>
+      <p class="plot-description">Multi-layer final ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain FINAL_LAYER. Legacy zones without SINGLE_LAYER or FINAL_LAYER are kept in this final-layer plot. The clean reference shape is drawn from R00_REFERENCE. Slice location(s): Y = 0.9144 m. Bin set(s): BINSXX. Legend: PID.DID and layer/zone index.</p>
       
-        <section class="slice-plot-group">
-          <h5>Y = 0.9144 m</h5>
-          <div class="plot-container">
-            
+            <section class="slice-plot-group">
+              <h5>Y = 0.9144 m | BINSXX</h5>
+              <div class="plot-container">
+                
     <div class="placeholder-card">
-      <h4>Multi-layer final ice shape | Y = 0.9144 m</h4>
-      <p>No matching finalIceShape variables were found yet for this case/grid level and slice.</p>
+      <h4>Multi-layer final ice shape | Y = 0.9144 m | BINSXX</h4>
+      <p>No matching FINAL_LAYER iceShape zones were found yet for this case/grid level, slice, and bin set.</p>
     </div>
     
-          </div>
-        </section>
-        
+              </div>
+            </section>
+            
     </section>
     
     </section>
