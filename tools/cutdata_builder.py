@@ -28,6 +28,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "y_label": "Cp [-]",
         "filename_slug": "cp_vs_x",
         "bins_filter": "BINS03",
+        "reverse_y_axis": True,
     },
     {
         "plot_key": "htc_vs_s",
@@ -233,13 +234,17 @@ def format_slice_positions(slice_values: list[float]) -> str:
     return ", ".join(f"Y = {value:g} m" for value in unique_values)
 
 
-def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 560, legend_right: bool = True) -> go.Figure:
+def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 560, legend_right: bool = True, reverse_y_axis: bool = False) -> go.Figure:
     if legend_right:
         legend = dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top")
         margin = dict(l=90, r=220, t=30, b=80)
     else:
         legend = dict(orientation="h", x=0.0, xanchor="left", y=1.12, yanchor="bottom")
         margin = dict(l=90, r=40, t=70, b=80)
+
+    yaxis = dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False)
+    if reverse_y_axis:
+        yaxis["autorange"] = "reversed"
 
     fig.update_layout(
         font=dict(family="Arial, Helvetica, sans-serif", size=16),
@@ -248,7 +253,7 @@ def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 56
         title=None,
         showlegend=True,
         xaxis=dict(title=dict(text=x_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
-        yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        yaxis=yaxis,
         legend=legend,
         margin=margin,
         plot_bgcolor="white",
@@ -453,7 +458,7 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
             trace_count += 1
 
     trace_count += add_reference_traces(fig, case_id, grid_level, plot_spec["plot_key"])
-    style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"], reverse_y_axis=plot_spec.get("reverse_y_axis", False))
     skipped_notes = sorted(skipped_note_set)
     return fig, trace_count, slice_positions, skipped_notes
 

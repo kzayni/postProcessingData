@@ -1,0 +1,42 @@
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#   IPW-3 Final Ice Shape DATA SUBMITTAL FORM for Test Case ###, May 4th 2026
+#
+# 
+#
+#
+#       NOMENCLATURE:
+#                  X [m]:  X-coordinate of the surface (clean for reference)
+#                  Y [m]:  Y-coordinate of the surface (clean for reference)
+#                  Z [m]:  Z-coordinate of the surface (clean for reference)
+#             X_ICED [m]:  X-coordinate of the final ice surface 
+#             Y_ICED [m]:  Y-coordinate of the final ice surface
+#             Z_ICED [m]:  Z-coordinate of the final ice surface
+#
+#                XXX:   Participant ID (assigned by IPW committee); e.g., 001, 020, 147
+#                ###:   Test case name (NACA0012_AE3932, NACA0012_3933, ONERAM6)
+#            DATASET:   Sequential number, should start at 01 for each participant 
+#
+#    E.g. TITLE field could be: 001_NACA0012_AE3932_03 for the third submission by participant 1 for the case NACA0012_AE3932
+#
+#
+#    FLOW CONDITIONS:
+#                        AOA : 4.0 deg
+#                 Mach Number: 0.3114 [-]
+#                         MAC: 0.5334 [m]
+#             Reynolds Number: 3.8441 million (based on MAC)
+#             Freestream Temp: XXX [K]
+#              Reference area: 0.97548 [m2]
+#     Moment Reference Center: 0.13335, 0, 0 [m] (X, Y, Z)
+#
+#              NOTES: 1. Please use at least 5 decimal places in the numerical values
+#                     2. If data are NOT provided, please fill data fields with a numerical value of "-999" 
+#
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+AUXDATA NUM_LAYERS  = "insert the number of total ice layers"
+AUXDATA DATA_TYPE   = "insert the ice shape type SLICE or MCCS"
+                                              
+VARIABLES = "X" "Y" "Z" "X_ICED" "Y_ICED" "Z_ICED"
+
+# The following section is for final ice shape data:

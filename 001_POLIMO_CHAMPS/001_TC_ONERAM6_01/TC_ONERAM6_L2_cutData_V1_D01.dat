@@ -1,0 +1,52 @@
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#   IPW-3 Cut/Slice DATA SUBMITTAL FORM for Test Case ###, May 4th 2026
+#
+#  
+#
+#
+#       NOMENCLATURE:
+#                  X [m]:  X-coordinate of the surface (clean for reference)
+#                  Y [m]:  Y-coordinate of the surface (clean for reference)
+#                  Z [m]:  Z-coordinate of the surface (clean for reference)
+#             X_ICED [m]:  X-coordinate of the ice surface (1/1 layer only)
+#             Y_ICED [m]:  Y-coordinate of the ice surface (1/1 layer only)
+#             Z_ICED [m]:  Z-coordinate of the ice surface (1/1 layer only)
+#                  s [m]:  Wrap distance from high-light on surface (X, Y, Z)
+#                 Cp [-]:  Pressure coefficient
+#            HTC [W/m2K]:  Convective Heat Transfer Coefficient
+#               Beta [-]:  Collection efficiency
+#                 Ts [K]:  Surface temperature
+#                 FF [-]:  Freezing fraction
+#                  k [m]:  Surface roughness height (OPTIONAL)
+#         RhoIce [kg/m3]:  Ice density (OPTIONAL)
+#      HTC_CLEAN [W/m2K]:  Convective Heat Transfer Coefficient on the surface without roughness (OPTIONAL)
+#
+#                XXX:   Participant ID (assigned by IPW committee); e.g., 001, 020, 147
+#                ###:   Test case name (NACA0012_AE3932, NACA0012_3933, ONERAM6)
+#            DATASET:   Sequential number, should start at 01 for each participant 
+#
+#    E.g. TITLE field could be: 001_NACA0012_AE3932_03 for the third submission by participant 1 for the case NACA0012_AE3932
+#
+#
+#    FLOW CONDITIONS:
+#                        AOA : 4.0 deg
+#                 Mach Number: 0.3114 [-]
+#                         MAC: 0.5334 [m]
+#             Reynolds Number: 3.8441 million (based on MAC)
+#             Freestream Temp: XXX [K]
+#              Reference area: 0.97548 [m2]
+#     Moment Reference Center: 0.13335, 0, 0 [m] (X, Y, Z)
+#
+#              NOTES: 1. Please use at least 5 decimal places in the numerical values
+#                     2. If data are NOT provided, please fill data fields with a numerical value of "-999" 
+#
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+                                                             <- Optional ->                 
+VARIABLES = "X" "Y" "Z" "Cp" "HTC" "Beta" "Ts" "FF" "k" "RhoIce" "HTC_CLEAN"
+
+##### INTERNAL COMMENT : WILL ADD DETAILS ABOUT THE SLICE ONCE THE FORMAT IS AGREED #####
+
+# The following section contains first-layer surface variables for the selected grid level.
+# Each ZONE corresponds to one slice location and one droplet-bin distribution.
