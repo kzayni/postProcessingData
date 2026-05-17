@@ -10,17 +10,17 @@ from .gatherParticipantData import iter_case_data
 from .participant_style import participant_color
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "N [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
-    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "N [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
-    {"plot_key": "cmy_vs_n", "title": "CMY grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY"], "x_label": "N [-]", "y_label": "CMY [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
+    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "Grid level [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
+    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "Grid level [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
+    {"plot_key": "cmy_vs_n", "title": "CMY grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY"], "x_label": "Grid level [-]", "y_label": "CMY [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
 
-    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "Grid level [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "Grid level [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "Grid level [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
 
-    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "Grid level [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "Grid level [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "Grid level [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
 ]
 
 def extract_icing_bin_set_from_zone_name(zone_name: str) -> str | None:
@@ -87,6 +87,10 @@ def participant_label(participant) -> str:
     return f"{participant.participant_id}"
 
 
+def format_x_hover_label(x_column: str) -> str:
+    return "Grid level" if x_column.upper() == "N" else x_column
+
+
 def plotly_config(filename: str) -> dict[str, Any]:
     return {
         "responsive": True,
@@ -109,16 +113,17 @@ def empty_placeholder(title: str, message: str) -> str:
 
 
 def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 520) -> go.Figure:
+    x_title = f"{x_label}<br><span style='font-size:14px'>&lt;- Finer&nbsp;&nbsp;|&nbsp;&nbsp;Coarser -&gt;</span>"
     fig.update_layout(
         font=dict(family="Arial, Helvetica, sans-serif", size=16),
         autosize=True,
         height=height,
         title=None,
         showlegend=True,
-        xaxis=dict(title=dict(text=x_label, font=dict(size=18)), type="log", autorange="reversed", ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        xaxis=dict(title=dict(text=x_title, font=dict(size=18)), type="linear", range=[0, 5], tickmode="array", tickvals=[0, 1, 2, 3, 4, 5], ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
         yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
         legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
-        margin=dict(l=90, r=220, t=30, b=80),
+        margin=dict(l=90, r=220, t=30, b=95),
         plot_bgcolor="white",
         paper_bgcolor="white",
     )
@@ -211,7 +216,7 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                                 f"Case: {escape(case_id)}<br>"
                                 f"Zone: {escape(zone_name)}<br>"
                                 f"Diameter={diameter:g} um<br>"
-                                f"{escape(x_column)}=%{{x}}<br>"
+                                f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
                                 f"{escape(y_column)}=%{{y}}<extra></extra>"
                             ),
                         )
@@ -251,7 +256,7 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                             f"Participant: {escape(label)}<br>"
                             f"Case: {escape(case_id)}<br>"
                             f"Zone: {escape(zone_name)}<br>"
-                            f"{escape(x_column)}=%{{x}}<br>"
+                            f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
                             f"{escape(y_column)}=%{{y}}<br>"
                             "Grid level=%{customdata}<extra></extra>"
                         ),
@@ -413,7 +418,7 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
                         f"Bin: {target_bin_number:g}<br>"
                         f"Diameter: {target_diameter:g} μm<br>"
                         f"Zone: {escape(zone_name)}<br>"
-                        f"{escape(x_column)}=%{{x}}<br>"
+                        f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
                         f"{escape(y_column)}=%{{y}}<br>"
                         "Grid level=%{customdata}<extra></extra>"
                     ),
@@ -583,7 +588,7 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                         f"Case: {escape(case_id)}<br>"
                         f"Bin set: {escape(target_bin_set)}<br>"
                         f"Zone: {escape(zone_name)}<br>"
-                        f"{escape(x_column)}=%{{x}}<br>"
+                        f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
                         f"{escape(y_column)}=%{{y}}<br>"
                         "Grid level=%{customdata}<extra></extra>"
                     ),
