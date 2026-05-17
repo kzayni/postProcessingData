@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 import re
 
+import pandas as pd
 import plotly.graph_objects as go
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
@@ -273,6 +274,64 @@ def load_clean_reference_data(reference_path_text: str):
         return read_tecplot_dat(Path(reference_path_text), process_cutdata=False)
 
 
+def ordered_clean_reference_columns(case_id: str, zone, x_column: str, z_column: str):
+    """Return clean-reference points in a plotting-friendly order.
+
+    NACA0012 reference rows can arrive in exported segment order, which makes a
+    line trace jump between the leading and trailing edge. Sort that airfoil
+    into a conventional upper-surface then lower-surface loop for display.
+    """
+    data = zone.data[[x_column, z_column]].dropna()
+    if "NACA0012" not in case_id.upper() or data.empty:
+        return data[x_column], data[z_column]
+
+    segments = []
+    segment_start = 0
+    previous = None
+    for row_number, row in enumerate(data.itertuples(index=False)):
+        point = (float(getattr(row, x_column)), float(getattr(row, z_column)))
+        if previous is not None:
+            distance = ((point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2) ** 0.5
+            if distance > 0.05:
+                segment = data.iloc[segment_start:row_number].drop_duplicates()
+                if len(segment) > 1:
+                    segments.append(segment)
+                segment_start = row_number
+        previous = point
+
+    segment = data.iloc[segment_start:].drop_duplicates()
+    if len(segment) > 1:
+        segments.append(segment)
+
+    if not segments:
+        return data[x_column], data[z_column]
+
+    midline = float(data[z_column].mean())
+    upper_segments = []
+    lower_segments = []
+    for segment in segments:
+        if float(segment[z_column].mean()) >= midline:
+            oriented = segment.sort_values(x_column, ascending=True)
+            upper_segments.append(oriented)
+        else:
+            oriented = segment.sort_values(x_column, ascending=False)
+            lower_segments.append(oriented)
+
+    upper_segments.sort(key=lambda segment: float(segment[x_column].iloc[0]))
+    lower_segments.sort(key=lambda segment: float(segment[x_column].iloc[0]), reverse=True)
+    ordered = pd.concat(upper_segments + lower_segments, ignore_index=True).drop_duplicates()
+
+    if ordered.empty:
+        return data[x_column], data[z_column]
+
+    first = ordered.iloc[0]
+    last = ordered.iloc[-1]
+    if abs(float(first[x_column]) - float(last[x_column])) > 1.0e-10 or abs(float(first[z_column]) - float(last[z_column])) > 1.0e-10:
+        ordered = pd.concat([ordered, first.to_frame().T], ignore_index=True)
+
+    return ordered[x_column], ordered[z_column]
+
+
 def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float | None = None) -> tuple[int, list[float]]:
     reference_path = clean_reference_path_for_case(case_id)
     if reference_path is None or not reference_path.exists():
@@ -298,11 +357,12 @@ def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float 
         z_column = find_column_case_insensitive(zone.data.columns, ["Z", "CoordinateZ"])
         if x_column is None or z_column is None:
             continue
+        x_values, z_values = ordered_clean_reference_columns(case_id, zone, x_column, z_column)
 
         fig.add_trace(
             go.Scatter(
-                x=zone.data[x_column],
-                y=zone.data[z_column],
+                x=x_values,
+                y=z_values,
                 mode="lines",
                 name="Clean reference",
                 legendgroup="clean_reference",

@@ -14,6 +14,7 @@ from .participant_style import participant_color
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
 BETA_BINS = ["BINS03", "BINS07", "BINS15"]
+ENABLE_COMBINED_BETA_BY_PARTICIPANT = False
 
 REFERENCE_DATA_SOURCES: list[dict[str, Any]] = []
 
@@ -651,6 +652,8 @@ def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) 
     html = ""
     for plot_spec in CUTDATA_PLOTS:
         if plot_spec.get("plot_key") == "beta_cards_vs_s":
+            if not ENABLE_COMBINED_BETA_BY_PARTICIPANT:
+                continue
             html += build_combined_beta_section(participants, case_id, grid_level)
         else:
             html += build_plot_subsection(participants, case_id, grid_level, plot_spec)
