@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+import argparse
 import math
 import re
 from zipfile import ZipFile
@@ -1357,6 +1358,28 @@ def is_participant_folder(path: Path) -> bool:
     return re.match(r"^\d{3}_", path.name) is not None
 
 
+def normalize_participant_id(participant_id: str | int) -> str:
+    """Normalize participant IDs so 10, 010, and 0010 can match folder names."""
+    text = str(participant_id).strip()
+    if text.isdigit():
+        return f"{int(text):03d}"
+    return text
+
+
+def find_participant_folder_by_id(root_dir: Path, participant_id: str | int) -> Path | None:
+    """Find one participant folder by its numerical ID prefix."""
+    target_id = normalize_participant_id(participant_id)
+
+    for participant_dir in sorted(root_dir.iterdir()):
+        if not is_participant_folder(participant_dir):
+            continue
+        folder_participant_id, _, _ = parse_participant_folder_name(participant_dir.name)
+        if normalize_participant_id(folder_participant_id) == target_id:
+            return participant_dir
+
+    return None
+
+
 # =============================================================================
 # Folder scanning
 # =============================================================================
@@ -1537,6 +1560,171 @@ def collect_case_ids(participants: list[Participant]) -> set[str]:
 
 
 # =============================================================================
+# Submission recap
+# =============================================================================
+
+def format_path_for_recap(path: Path, root_dir: Path) -> str:
+    """Format paths relative to the scanned root when possible."""
+    try:
+        return str(path.relative_to(root_dir))
+    except ValueError:
+        return str(path)
+
+
+def file_status(path: Path | None) -> str:
+    """Return a compact yes/no status for one expected file slot."""
+    return path.name if path is not None else "missing"
+
+
+def format_variables(variables: list[str]) -> str:
+    """Format variable names for recap output."""
+    return ", ".join(variables) if variables else "none detected"
+
+
+def valid_value_count(zone: ZoneData, column: str) -> int:
+    """Count non-placeholder values for a parsed numerical column."""
+    if column not in zone.data.columns:
+        return 0
+    return int((zone.data[column] != -999.0).sum())
+
+
+def print_tecplot_data_recap(data: TecplotData, indent: str = "          ") -> None:
+    """Print variables and zones found inside one parsed Tecplot-like file."""
+    print(f"{indent}Variables: {format_variables(data.variables)}")
+    print(f"{indent}Zones ({len(data.zones)}):")
+
+    if not data.zones:
+        print(f"{indent}  none detected")
+        return
+
+    for zone_name, zone in data.zones.items():
+        info = parse_ipw3_zone_name(zone_name)
+        if info is None:
+            print(f"{indent}  {zone_name} | rows={len(zone.data)}")
+            continue
+
+        slice_position = decode_slice_position(info["slice"]) if info["slice"] else None
+        print(
+            f"{indent}  {zone_name} | "
+            f"type={info['type']} | slice={slice_position} | "
+            f"bins={info['bins']} | dataset={info['dataset']} | rows={len(zone.data)}"
+        )
+
+
+def print_grid_convergence_recap(data: TecplotData, indent: str = "      ") -> None:
+    """Print a concise recap of parsed grid-convergence workbook/dat content."""
+    print(f"{indent}Parsed variables: {format_variables(data.variables)}")
+    print(f"{indent}Parsed tables/zones ({len(data.zones)}):")
+
+    if not data.zones:
+        print(f"{indent}  none detected")
+        return
+
+    for zone_name, zone in data.zones.items():
+        source_sheet = ""
+        requirement = ""
+        if "SOURCE_SHEET" in zone.data.columns and not zone.data.empty:
+            source_sheet = str(zone.data["SOURCE_SHEET"].iloc[0])
+        if "SOURCE_REQUIREMENT" in zone.data.columns and not zone.data.empty:
+            requirement = str(zone.data["SOURCE_REQUIREMENT"].iloc[0])
+
+        details: list[str] = [f"rows={len(zone.data)}"]
+        if source_sheet:
+            details.append(f"sheet={source_sheet}")
+        if requirement:
+            details.append(f"kind={requirement}")
+
+        bin_set = None
+        if "BIN_SET" in zone.data.columns and not zone.data.empty:
+            bin_set = sorted(set(str(value) for value in zone.data["BIN_SET"]))
+        if bin_set:
+            details.append(f"bins={','.join(bin_set)}")
+
+        roughness = None
+        if "ROUGHNESS_KEY" in zone.data.columns and not zone.data.empty:
+            roughness = sorted(set(str(value) for value in zone.data["ROUGHNESS_KEY"] if str(value)))
+        if roughness:
+            details.append(f"roughness={','.join(roughness)}")
+
+        value_counts = []
+        for column in ["CL", "CD", "CMY", "CMZ", "WATER_MASS", "ICE_MASS", "WATER_EVAP_MASS"]:
+            count = valid_value_count(zone, column)
+            if count:
+                value_counts.append(f"{column}:{count}")
+        if value_counts:
+            details.append(f"values={','.join(value_counts)}")
+
+        print(f"{indent}  {zone_name} | {' | '.join(details)}")
+
+
+def print_participant_submission_recap(participant: Participant, root_dir: Path) -> None:
+    """Print a compact recap of one participant's submitted files."""
+    print("=" * 80)
+    print(f"Participant {participant.participant_id}")
+    print("=" * 80)
+    print(f"Folder:       {format_path_for_recap(participant.path, root_dir)}")
+    print(f"Organization: {participant.organization}")
+    print(f"Solver:       {participant.solver}")
+
+    if not participant.cases:
+        print("\nNo recognized IPW3 case submissions were found.")
+    else:
+        print("\nRecognized submissions:")
+
+    for case_id, case_data in sorted(participant.cases.items()):
+        print(f"\n  {case_id}")
+        print(f"    Expected slices: {', '.join(str(value) for value in case_data.expected_slices) or 'none configured'}")
+        print(f"    Grid convergence: {file_status(case_data.grid_convergence_file)}")
+        if case_data.grid_convergence_data is not None:
+            print_grid_convergence_recap(case_data.grid_convergence_data, indent="      ")
+
+        if case_data.grid_levels:
+            print("    Grid-level files:")
+        else:
+            print("    Grid-level files: none")
+
+        for grid_level, grid_data in sorted(case_data.grid_levels.items()):
+            print(f"      {grid_level}")
+
+            if not grid_data.datasets:
+                print("        No datasets found.")
+
+            for dataset_id, dataset_data in sorted(grid_data.datasets.items()):
+                print(
+                    f"        {dataset_id}: "
+                    f"cutData={file_status(dataset_data.cut_data_file)}, "
+                    f"iceShape={file_status(dataset_data.ice_shape_file)}"
+                )
+
+                if dataset_data.cut_data is not None:
+                    print("          cutData contents:")
+                    print_tecplot_data_recap(dataset_data.cut_data, indent="            ")
+
+                if dataset_data.ice_shape_data is not None:
+                    print("          iceShape contents:")
+                    print_tecplot_data_recap(dataset_data.ice_shape_data, indent="            ")
+
+                if dataset_data.other_files:
+                    other_names = ", ".join(path.name for path in dataset_data.other_files)
+                    print(f"          Other files: {other_names}")
+
+            if grid_data.other_files:
+                other_names = ", ".join(path.name for path in grid_data.other_files)
+                print(f"        Other grid files: {other_names}")
+
+        if case_data.other_files:
+            other_names = ", ".join(path.name for path in case_data.other_files)
+            print(f"    Other case files: {other_names}")
+
+    if participant.other_files:
+        print("\nOther participant-level files:")
+        for other_file in participant.other_files:
+            print(f"  {format_path_for_recap(other_file, root_dir)}")
+
+    print()
+
+
+# =============================================================================
 # Example access
 # =============================================================================
 
@@ -1627,17 +1815,62 @@ def print_specific_zone_example(participants: list[Participant], case_id: str = 
 # Main
 # =============================================================================
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Scan IPW3 participant submissions and print submission recaps.",
+    )
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Directory containing participant folders. Defaults to the current directory.",
+    )
+    parser.add_argument(
+        "--id",
+        dest="participant_id",
+        help="Participant ID to recap, for example 10 or 010.",
+    )
+    parser.add_argument(
+        "--no-read-files",
+        action="store_true",
+        help="Only scan filenames; skip parsing Excel and .dat contents in the recap.",
+    )
+    parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Print the legacy detailed parsed-zone summary instead of the compact submission recap.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
     """Scan participants from the current directory and print a summary."""
-    root_dir = Path(".")
+    args = parse_args()
+    root_dir = args.root
 
     log_step(f"Scanning participants in: {root_dir.resolve()}")
-    participants = scan_all_participants(root_dir)
+
+    if args.participant_id is not None:
+        participant_dir = find_participant_folder_by_id(root_dir, args.participant_id)
+        if participant_dir is None:
+            requested_id = normalize_participant_id(args.participant_id)
+            print(f"No participant folder found for ID {requested_id} in {root_dir.resolve()}.")
+            return
+
+        participants = [scan_participant_folder(participant_dir)]
+    else:
+        participants = scan_all_participants(root_dir)
+
     print(f"Found {len(participants)} participant folder(s).")
 
     for participant in participants:
-        participant.read_files()
-        participant.summary()
+        if args.detailed:
+            participant.read_files()
+            participant.summary()
+        else:
+            if not args.no_read_files:
+                participant.read_files()
+            print_participant_submission_recap(participant, root_dir)
 
     # Uncomment these while debugging if needed.
     # print_example_zone_access(participants)
