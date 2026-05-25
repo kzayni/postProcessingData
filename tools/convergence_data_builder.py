@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from html import escape
+from pathlib import Path
 from typing import Any
 import re
 
@@ -10,24 +12,74 @@ from .gatherParticipantData import iter_case_data
 from .participant_style import participant_color
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "Grid level [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
-    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "Grid level [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
-    {"plot_key": "cmy_vs_n", "title": "CMY grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY"], "x_label": "Grid level [-]", "y_label": "CMY [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
+    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
+    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
+    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
 
-    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "Grid level [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "Grid level [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "Grid level [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
-
-    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "Grid level [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "Grid level [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass grid convergence by diameter", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "Grid level [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
 ]
 
+GRID_SPACING_COLUMN = "N_NEGATIVE_ONE_THIRD"
+
+
+def grid_cell_reference_path_for_case(case_id: str) -> Path | None:
+    if "ONERAM6" in case_id.upper():
+        return Path("R00_REFERENCE") / "ONERAM6_GRID.dat"
+    if "NACA0012" in case_id.upper():
+        return Path("R00_REFERENCE") / "NACA0012_GRID.dat"
+    return None
+
+
+@lru_cache(maxsize=None)
+def load_grid_cell_counts(reference_path_text: str) -> dict[int, float]:
+    grid_cell_counts: dict[int, float] = {}
+    for line in Path(reference_path_text).read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.upper().startswith("VARIABLES"):
+            continue
+        values = stripped.split()
+        if len(values) < 2:
+            continue
+        try:
+            grid_level = int(float(values[0]))
+            num_cells = float(values[1])
+        except ValueError:
+            continue
+        if grid_level > 0 and num_cells > 0.0:
+            grid_cell_counts[grid_level] = num_cells
+    return grid_cell_counts
+
+
+def grid_cell_counts_for_case(case_id: str) -> dict[int, float]:
+    reference_path = grid_cell_reference_path_for_case(case_id)
+    if reference_path is None or not reference_path.exists():
+        return {}
+    return load_grid_cell_counts(str(reference_path))
+
 def extract_icing_bin_set_from_zone_name(zone_name: str) -> str | None:
-    match = re.search(r"_Icing_(?P<bin_set>BINS\d+)$", zone_name, re.IGNORECASE)
+    match = re.search(r"_Icing_(?P<bin_set>BINS\d+)(?:_roughness_.+)?$", zone_name, re.IGNORECASE)
     if match is None:
         return None
     return match.group("bin_set").upper()
+
+
+def bin_count_from_bin_set(bin_set: str) -> int | None:
+    match = re.search(r"\d+", bin_set)
+    if match is None:
+        return None
+
+    bin_count = int(match.group(0))
+    return bin_count if bin_count > 0 else None
+
+
+def is_required_grid_convergence_zone(zone) -> bool:
+    requirement_column = find_column_case_insensitive(zone.data.columns, ["SOURCE_REQUIREMENT", "SourceRequirement"])
+    if requirement_column is None:
+        return True
+
+    return any(str(value).strip().lower() == "required" for value in zone.data[requirement_column])
 
 def slugify(text: str) -> str:
     text = text.strip().lower()
@@ -78,6 +130,19 @@ def find_column_case_insensitive(columns, candidates: list[str]) -> str | None:
     return None
 
 
+def case_ordered_y_candidates(case_id: str, candidates: list[str]) -> list[str]:
+    """Prefer the pitching-moment component used by each test case."""
+    if "CMY" not in candidates or "CMZ" not in candidates:
+        return candidates
+
+    case_id_upper = case_id.upper()
+    if "NACA0012" in case_id_upper:
+        return ["CMZ", "CMY"]
+    if "ONERAM6" in case_id_upper:
+        return ["CMY", "CMZ"]
+    return candidates
+
+
 def participant_label(participant) -> str:
     """Return the legend label for a participant-level grid-convergence file.
 
@@ -88,7 +153,51 @@ def participant_label(participant) -> str:
 
 
 def format_x_hover_label(x_column: str) -> str:
-    return "Grid level" if x_column.upper() == "N" else x_column
+    return "N^(-1/3)" if x_column == GRID_SPACING_COLUMN else x_column
+
+
+def grid_level_number_from_value(value: Any) -> int | None:
+    match = re.search(r"\d+", str(value))
+    if match is None:
+        return None
+    try:
+        return int(match.group(0))
+    except ValueError:
+        return None
+
+
+def add_grid_spacing_column(data, case_id: str, x_column: str, grid_column: str | None = None):
+    grid_cell_counts = grid_cell_counts_for_case(case_id)
+    if not grid_cell_counts:
+        return data.iloc[0:0].copy()
+
+    working_data = data.copy()
+    grid_levels: list[str | None] = []
+    num_cells_values: list[float | None] = []
+    grid_spacing_values: list[float | None] = []
+
+    for _, row in working_data.iterrows():
+        level_number = None
+        if grid_column is not None and grid_column in working_data.columns:
+            level_number = grid_level_number_from_value(row[grid_column])
+        if level_number is None:
+            level_number = grid_level_number_from_value(row[x_column])
+
+        num_cells = grid_cell_counts.get(level_number) if level_number is not None else None
+        if level_number is None or num_cells is None:
+            grid_levels.append(None)
+            num_cells_values.append(None)
+            grid_spacing_values.append(None)
+            continue
+
+        grid_levels.append(f"L{level_number}")
+        num_cells_values.append(num_cells)
+        grid_spacing_values.append(num_cells ** (-1.0 / 3.0))
+
+    working_data["GRID_LEVEL_DISPLAY"] = grid_levels
+    working_data["GRID_CELL_COUNT"] = num_cells_values
+    working_data[GRID_SPACING_COLUMN] = grid_spacing_values
+    return working_data.dropna(subset=[GRID_SPACING_COLUMN])
 
 
 def plotly_config(filename: str) -> dict[str, Any]:
@@ -113,14 +222,31 @@ def empty_placeholder(title: str, message: str) -> str:
 
 
 def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 520) -> go.Figure:
-    x_title = f"{x_label}<br><span style='font-size:14px'>&lt;- Finer&nbsp;&nbsp;|&nbsp;&nbsp;Coarser -&gt;</span>"
+    x_title = f"{x_label} <br><span style='font-size:14px'>&lt;- Finer (more cells)&nbsp;&nbsp;|&nbsp;&nbsp;Coarser (fewer cells) -&gt;</span>"
     fig.update_layout(
         font=dict(family="Arial, Helvetica, sans-serif", size=16),
         autosize=True,
         height=height,
         title=None,
         showlegend=True,
-        xaxis=dict(title=dict(text=x_title, font=dict(size=18)), type="linear", range=[0, 5], tickmode="array", tickvals=[0, 1, 2, 3, 4, 5], ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        xaxis=dict(title=dict(text=x_title, font=dict(size=18)), type="log", tickformat=".2e", exponentformat="power", showexponent="all", ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
+        margin=dict(l=90, r=220, t=30, b=95),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+    return fig
+
+
+def style_inverse_bin_figure(fig: go.Figure, y_label: str, height: int = 520) -> go.Figure:
+    fig.update_layout(
+        font=dict(family="Arial, Helvetica, sans-serif", size=16),
+        autosize=True,
+        height=height,
+        title=None,
+        showlegend=True,
+        xaxis=dict(title=dict(text="1 / number of bins [-]", font=dict(size=18)), type="log", tickformat=".3g", ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
         yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
         legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
         margin=dict(l=90, r=220, t=30, b=95),
@@ -158,18 +284,20 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
 
             participant_had_matching_zone = True
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
-            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+            grid_column = find_column_case_insensitive(zone.data.columns, ["GRID_LEVEL", "GridLevel"])
             if x_column is None or y_column is None:
                 continue
             participant_had_variable = True
 
             data = zone.data[[x_column, y_column]].copy()
             data = data[(data[x_column] > 0.0) & (data[x_column] != -999.0) & (data[y_column] != -999.0)]
+            data = add_grid_spacing_column(data, case_id, x_column, grid_column=grid_column)
             
             if data.empty:
                 continue
 
-            data = data.sort_values(x_column)
+            data = data.sort_values(GRID_SPACING_COLUMN)
             
             if is_diameter_plot:
                 diameter_column = find_column_case_insensitive(zone.data.columns, ["DIAMETER", "Diameter"])
@@ -178,10 +306,11 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                     continue
 
                 working_data = zone.data.loc[data.index, [x_column, y_column, diameter_column] + ([bin_set_column] if bin_set_column is not None else [])].copy()
+                working_data = add_grid_spacing_column(working_data, case_id, x_column, grid_column=grid_column)
                 working_data = working_data[working_data[diameter_column] != -999.0]
 
                 for diameter, diameter_data in working_data.groupby(diameter_column):
-                    diameter_data = diameter_data.sort_values(x_column)
+                    diameter_data = diameter_data.sort_values(GRID_SPACING_COLUMN)
                     if diameter_data.empty:
                         continue
                     bin_set = ""
@@ -204,20 +333,23 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                     seen_trace_keys.add(trace_key)
                     fig.add_trace(
                         go.Scatter(
-                            x=diameter_data[x_column],
+                            x=diameter_data[GRID_SPACING_COLUMN],
                             y=diameter_data[y_column],
                             mode="lines+markers",
                             name=trace_name,
                             legendgroup=trace_name,
                             line=dict(color=color),
                             marker=dict(color=color),
+                            customdata=diameter_data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                             hovertemplate=(
                                 f"Participant: {escape(label)}<br>"
                                 f"Case: {escape(case_id)}<br>"
                                 f"Zone: {escape(zone_name)}<br>"
                                 f"Diameter={diameter:g} um<br>"
-                                f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
-                                f"{escape(y_column)}=%{{y}}<extra></extra>"
+                                f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>"
+                                f"{escape(y_column)}=%{{y}}<br>"
+                                "Grid level=%{customdata[0]}<br>"
+                                "Num cells=%{customdata[1]:,.0f}<extra></extra>"
                             ),
                         )
                     )                    
@@ -226,44 +358,41 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
 
                 continue
 
-            grid_column = find_column_case_insensitive(zone.data.columns, ["GRID_LEVEL", "GridLevel"])
-            custom_data = None
-            if grid_column is not None:
-                custom_data = zone.data.loc[data.index, grid_column]
-                trace_key = (
-                    participant.participant_id,
-                    case_id,
-                    plot_spec["plot_key"],
-                    zone_name,
-                    roughness_filter or "",
+            trace_key = (
+                participant.participant_id,
+                case_id,
+                plot_spec["plot_key"],
+                zone_name,
+                roughness_filter or "",
+            )
+
+            if trace_key in seen_trace_keys:
+                continue
+
+            seen_trace_keys.add(trace_key)
+            fig.add_trace(
+                go.Scatter(
+                    x=data[GRID_SPACING_COLUMN],
+                    y=data[y_column],
+                    mode="lines+markers",
+                    name=label,
+                    legendgroup=label,
+                    line=dict(color=color),
+                    marker=dict(color=color),
+                    customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
+                    hovertemplate=(
+                        f"Participant: {escape(label)}<br>"
+                        f"Case: {escape(case_id)}<br>"
+                        f"Zone: {escape(zone_name)}<br>"
+                        f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>"
+                        f"{escape(y_column)}=%{{y}}<br>"
+                        "Grid level=%{customdata[0]}<br>"
+                        "Num cells=%{customdata[1]:,.0f}<extra></extra>"
+                    ),
                 )
-
-                if trace_key in seen_trace_keys:
-                    continue
-
-                seen_trace_keys.add(trace_key)
-                fig.add_trace(
-                    go.Scatter(
-                        x=data[x_column],
-                        y=data[y_column],
-                        mode="lines+markers",
-                        name=label,
-                        legendgroup=label,
-                        line=dict(color=color),
-                        marker=dict(color=color),
-                        customdata=custom_data,
-                        hovertemplate=(
-                            f"Participant: {escape(label)}<br>"
-                            f"Case: {escape(case_id)}<br>"
-                            f"Zone: {escape(zone_name)}<br>"
-                            f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
-                            f"{escape(y_column)}=%{{y}}<br>"
-                            "Grid level=%{customdata}<extra></extra>"
-                        ),
-                    )
-                )            
-                trace_count += 1
-                participant_trace_count += 1
+            )            
+            trace_count += 1
+            participant_trace_count += 1
 
         if participant_had_matching_zone and participant_trace_count == 0:
             variable_name = plot_spec["y_candidates"][0]
@@ -373,7 +502,7 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
                 continue
 
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
-            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
             diameter_column = find_column_case_insensitive(zone.data.columns, ["DIAMETER", "Diameter"])
             bin_set_column = find_column_case_insensitive(zone.data.columns, ["BIN_SET", "BinSet"])
             bin_column = find_column_case_insensitive(zone.data.columns, ["BIN", "Bin"])
@@ -387,12 +516,12 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
             data = data[data[bin_set_column].astype(str) == str(target_bin_set)]
             data = data[data[bin_column].astype(float) == float(target_bin_number)]
             data = data[data[diameter_column].astype(float) == float(target_diameter)]
+            data = add_grid_spacing_column(data, case_id, x_column, grid_column=grid_column)
 
             if data.empty:
                 continue
 
-            data = data.sort_values(x_column)
-            custom_data = data[grid_column] if grid_column is not None else None
+            data = data.sort_values(GRID_SPACING_COLUMN)
 
             trace_key = (participant.participant_id, plot_spec["plot_key"], zone_name, target_bin_set, float(target_diameter))
 
@@ -403,14 +532,14 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
 
             fig.add_trace(
                 go.Scatter(
-                    x=data[x_column],
+                    x=data[GRID_SPACING_COLUMN],
                     y=data[y_column],
                     mode="lines+markers",
                     name=label,
                     legendgroup=label,
                     line=dict(color=color),
                     marker=dict(color=color),
-                    customdata=custom_data,
+                    customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
                         f"Case: {escape(case_id)}<br>"
@@ -418,9 +547,10 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
                         f"Bin: {target_bin_number:g}<br>"
                         f"Diameter: {target_diameter:g} μm<br>"
                         f"Zone: {escape(zone_name)}<br>"
-                        f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
+                        f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>"
                         f"{escape(y_column)}=%{{y}}<br>"
-                        "Grid level=%{customdata}<extra></extra>"
+                        "Grid level=%{customdata[0]}<br>"
+                        "Num cells=%{customdata[1]:,.0f}<extra></extra>"
                     ),
                 )
             )
@@ -489,7 +619,7 @@ def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, 
                 continue
 
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
-            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
 
             if x_column is not None and y_column is not None:
                 roughness_keys.add(roughness_key)
@@ -497,8 +627,8 @@ def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, 
     preferred_order = ["smooth", "0.5mm", "1mm", "1.5mm", "variable_roughness"]
     return [key for key in preferred_order if key in roughness_keys]
 
-def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
-    bin_sets: set[str] = set()
+def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
+    grid_levels: set[str] = set()
 
     for participant, case_data in iter_case_data(participants, case_id):
         if case_data.grid_convergence_data is None:
@@ -506,6 +636,8 @@ def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             if "by_diameter" in zone_name.lower():
+                continue
+            if not is_required_grid_convergence_zone(zone):
                 continue
 
             bin_set = extract_icing_bin_set_from_zone_name(zone_name)
@@ -513,19 +645,32 @@ def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[
                 continue
 
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
-            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+            grid_column = find_column_case_insensitive(zone.data.columns, ["GRID_LEVEL", "GridLevel"])
 
-            if x_column is not None and y_column is not None:
-                bin_sets.add(bin_set)
+            if x_column is None or y_column is None:
+                continue
 
-    preferred_order = ["BINS03", "BINS07", "BINS15"]
-    return [bin_set for bin_set in preferred_order if bin_set in bin_sets]
+            for _, row in zone.data.iterrows():
+                value = row[y_column]
+                if value == -999.0:
+                    continue
+                level_number = None
+                if grid_column is not None:
+                    level_number = grid_level_number_from_value(row[grid_column])
+                if level_number is None:
+                    level_number = grid_level_number_from_value(row[x_column])
+                if level_number is not None:
+                    grid_levels.add(f"L{level_number}")
 
-def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_bin_set: str) -> tuple[go.Figure, int, list[str]]:
+    return sorted(grid_levels, key=grid_level_number_from_value)
+
+
+def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_grid_level: str) -> tuple[go.Figure, int, list[str]]:
     fig = go.Figure()
     trace_count = 0
     skipped_notes: list[str] = []
-    seen_trace_keys: set[tuple[str, str, str, str]] = set()
+    seen_trace_keys: set[tuple[str, str, str]] = set()
 
     for participant, case_data in iter_case_data(participants, case_id):
         if case_data.grid_convergence_data is None:
@@ -533,77 +678,94 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
 
         label = participant_label(participant)
         color = participant_color(participant.participant_id)
+        trace_rows: list[dict[str, Any]] = []
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             if "by_diameter" in zone_name.lower():
                 continue
+            if not is_required_grid_convergence_zone(zone):
+                continue
 
             bin_set = extract_icing_bin_set_from_zone_name(zone_name)
-            if bin_set != target_bin_set:
+            if bin_set is None:
+                continue
+
+            bin_count = bin_count_from_bin_set(bin_set)
+            if bin_count is None:
                 continue
 
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
-            y_column = find_column_case_insensitive(zone.data.columns, plot_spec["y_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
             grid_column = find_column_case_insensitive(zone.data.columns, ["GRID_LEVEL", "GridLevel"])
 
             if x_column is None or y_column is None:
                 continue
 
-            data = zone.data[[x_column, y_column]].copy()
-            data = data[(data[x_column] > 0.0) & (data[x_column] != -999.0) & (data[y_column] != -999.0)]
+            for _, row in zone.data.iterrows():
+                level_number = None
+                if grid_column is not None:
+                    level_number = grid_level_number_from_value(row[grid_column])
+                if level_number is None:
+                    level_number = grid_level_number_from_value(row[x_column])
+                if level_number is None or f"L{level_number}" != target_grid_level:
+                    continue
 
-            if data.empty:
-                continue
+                y_value = row[y_column]
+                if y_value == -999.0:
+                    continue
 
-            data = data.sort_values(x_column)
+                trace_rows.append({
+                    "inverse_bin_count": 1.0 / bin_count,
+                    "bin_set": bin_set,
+                    "bin_count": bin_count,
+                    "y": y_value,
+                    "zone_name": zone_name,
+                })
 
-            custom_data = None
-            if grid_column is not None:
-                custom_data = zone.data.loc[data.index, grid_column]
+        if not trace_rows:
+            continue
 
-            trace_key = (
-                participant.participant_id,
-                plot_spec["plot_key"],
-                zone_name,
-                target_bin_set,
+        trace_key = (participant.participant_id, plot_spec["plot_key"], target_grid_level)
+        if trace_key in seen_trace_keys:
+            continue
+
+        seen_trace_keys.add(trace_key)
+        trace_rows = sorted(trace_rows, key=lambda item: item["inverse_bin_count"])
+        customdata = [[row["bin_set"], row["bin_count"], row["zone_name"]] for row in trace_rows]
+
+        fig.add_trace(
+            go.Scatter(
+                x=[row["inverse_bin_count"] for row in trace_rows],
+                y=[row["y"] for row in trace_rows],
+                mode="lines+markers",
+                name=label,
+                legendgroup=label,
+                line=dict(color=color),
+                marker=dict(color=color),
+                customdata=customdata,
+                hovertemplate=(
+                    f"Participant: {escape(label)}<br>"
+                    f"Case: {escape(case_id)}<br>"
+                    f"Grid level: {escape(target_grid_level)}<br>"
+                    "Bin set: %{customdata[0]}<br>"
+                    "Number of bins: %{customdata[1]}<br>"
+                    "Zone: %{customdata[2]}<br>"
+                    "1 / number of bins=%{x:.6g}<br>"
+                    f"{escape(y_column)}=%{{y}}<extra></extra>"
+                ),
             )
+        )
 
-            if trace_key in seen_trace_keys:
-                continue
+        trace_count += 1
 
-            seen_trace_keys.add(trace_key)
-
-            fig.add_trace(
-                go.Scatter(
-                    x=data[x_column],
-                    y=data[y_column],
-                    mode="lines+markers",
-                    name=label,
-                    legendgroup=label,
-                    line=dict(color=color),
-                    marker=dict(color=color),
-                    customdata=custom_data,
-                    hovertemplate=(
-                        f"Participant: {escape(label)}<br>"
-                        f"Case: {escape(case_id)}<br>"
-                        f"Bin set: {escape(target_bin_set)}<br>"
-                        f"Zone: {escape(zone_name)}<br>"
-                        f"{escape(format_x_hover_label(x_column))}=%{{x}}<br>"
-                        f"{escape(y_column)}=%{{y}}<br>"
-                        "Grid level=%{customdata}<extra></extra>"
-                    ),
-                )
-            )
-
-            trace_count += 1
-
-    style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    style_inverse_bin_figure(fig, plot_spec["y_label"])
     return fig, trace_count, skipped_notes
 
-def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
-    bin_sets = collect_combined_icing_bin_sets(participants, case_id, plot_spec)
 
-    if not bin_sets:
+def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
+    grid_levels = collect_combined_icing_grid_levels(participants, case_id, plot_spec)
+
+    if not grid_levels:
         return f"""
         <section class="plot-subsection">
           <h4>{escape(plot_spec["title"])}</h4>
@@ -613,15 +775,15 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
 
     figures_html = ""
 
-    for bin_set in bin_sets:
-        fig, trace_count, skipped_notes = build_combined_icing_figure(participants, case_id, plot_spec, bin_set)
+    for grid_level in grid_levels:
+        fig, trace_count, skipped_notes = build_combined_icing_figure(participants, case_id, plot_spec, grid_level)
 
-        title = f"{plot_spec['title']} | {bin_set}"
+        title = f"{plot_spec['title']} | {grid_level}"
 
         if trace_count == 0:
-            figure_html = empty_placeholder(title=title, message="No matching combined values were found for this bin set.")
+            figure_html = empty_placeholder(title=title, message="No matching combined values were found for this grid level.")
         else:
-            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(bin_set)}"
+            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(grid_level)}_vs_inverse_bins"
             figure_html = figure_to_html_div(fig, filename=filename)
 
         figures_html += f"""
@@ -637,7 +799,7 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
     <section class="plot-subsection">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
-        Combined icing grid-convergence data from the Combined row of each bin distribution. Missing values equal to -999 are ignored. Legend: PID.
+        Combined icing data from required sheets plotted against 1 / number of bins. Each figure corresponds to one grid level. Missing values equal to -999 are ignored. Legend: PID.
       </p>
       {figures_html}
     </section>

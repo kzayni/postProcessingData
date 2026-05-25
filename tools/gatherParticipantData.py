@@ -839,6 +839,12 @@ def normalize_xlsx_case_ids(sheet_name: str) -> list[str]:
     if "ONERAM6" in sheet_name_upper or "ONERA-M6" in sheet_name_upper:
         return ["TC_ONERAM6"]
 
+    if "NACA0012_AE3932" in sheet_name_upper or "NACA0012AE3932" in sheet_name_upper:
+        return ["TC_NACA0012_AE3932"]
+
+    if "NACA0012_AE3933" in sheet_name_upper or "NACA0012AE3933" in sheet_name_upper:
+        return ["TC_NACA0012_AE3933"]
+
     if "NACA0012" in sheet_name_upper:
         return ["TC_NACA0012_AE3932", "TC_NACA0012_AE3933"]
 
@@ -905,6 +911,42 @@ def normalize_grid_convergence_column(header: str) -> str:
     return re.sub(r"[^A-Z0-9]+", "_", header_upper).strip("_")
 
 
+def is_required_xlsx_sheet(sheet_name: str) -> bool:
+    """Return True for required workbook sheets, whose names end with (R)."""
+    return re.search(r"\(\s*R\s*\)\s*$", sheet_name, re.IGNORECASE) is not None
+
+
+def xlsx_sheet_requirement(sheet_name: str) -> str:
+    """Return required/optional/unspecified for workbook sheet metadata."""
+    if is_required_xlsx_sheet(sheet_name):
+        return "required"
+    if re.search(r"\(\s*O\s*\)\s*$", sheet_name, re.IGNORECASE):
+        return "optional"
+    return "unspecified"
+
+
+def roughness_key_from_value(roughness: float) -> str:
+    """Create the canonical roughness key used by plot builders."""
+    if roughness == 0.0:
+        return "smooth"
+    if roughness < 0.0:
+        return "variable_roughness"
+    return f"{roughness:g}mm"
+
+
+def extract_roughness_from_text(text: str) -> tuple[str | None, float | None]:
+    """Extract roughness metadata from labels such as KS = 1.5mm or KS_1mm."""
+    if re.search(r"\bvariable\b", text, re.IGNORECASE):
+        return "variable_roughness", -1.0
+
+    match = re.search(r"\bKS\s*(?:=|_)?\s*(\d+(?:\.\d+)?)\s*mm\b", text, re.IGNORECASE)
+    if match is None:
+        return None, None
+
+    roughness = float(match.group(1))
+    return roughness_key_from_value(roughness), roughness
+
+
 def add_grid_convergence_zone(result: TecplotData, zone_name: str, rows: list[dict[str, Any]]) -> None:
     """Store one parsed workbook table as a Tecplot-like zone."""
     if not rows:
@@ -943,6 +985,8 @@ def parse_cfd_grid_convergence_sheet(result: TecplotData, sheet_name: str, rows:
                 parsed_row: dict[str, Any] = {
                     "N": float(level_number),
                     "GRID_LEVEL": f"L{level_number}",
+                    "SOURCE_SHEET": sheet_name,
+                    "SOURCE_REQUIREMENT": xlsx_sheet_requirement(sheet_name),
                     "ROUGHNESS_HEIGHT": roughness,
                     "CL": -999.0,
                     "CD": -999.0,
@@ -964,12 +1008,7 @@ def parse_cfd_grid_convergence_sheet(result: TecplotData, sheet_name: str, rows:
                         parsed_row[column_name] = cell_value
 
                 if any(parsed_row[column] != -999.0 for column in ["CL", "CD", "CMX", "CMY", "CMZ"]):
-                    if roughness == 0.0:
-                        roughness_key = "smooth"
-                    elif roughness < 0.0:
-                        roughness_key = "variable_roughness"
-                    else:
-                        roughness_key = f"{roughness:g}mm"
+                    roughness_key = roughness_key_from_value(roughness)
                     rows_by_roughness.setdefault(roughness_key, []).append(parsed_row)
 
             data_index += 1
@@ -983,8 +1022,9 @@ def parse_cfd_grid_convergence_sheet(result: TecplotData, sheet_name: str, rows:
 
 def parse_icing_grid_convergence_sheet(result: TecplotData, sheet_name: str, rows: list[list[str]]) -> None:
     """Parse icing mass tables grouped by grid level and bin set."""
-    rows_by_bin_set: dict[str, list[dict[str, Any]]] = {}
-    rows_by_diameter_bin_set: dict[str, list[dict[str, Any]]] = {}
+    rows_by_bin_set: dict[tuple[str, str | None], list[dict[str, Any]]] = {}
+    rows_by_diameter_bin_set: dict[tuple[str, str | None], list[dict[str, Any]]] = {}
+    sheet_roughness_key, sheet_roughness = extract_roughness_from_text(sheet_name)
     row_index = 0
 
     while row_index < len(rows):
@@ -995,17 +1035,23 @@ def parse_icing_grid_convergence_sheet(result: TecplotData, sheet_name: str, row
 
         group_row = rows[row_index + 1] if row_index + 1 < len(rows) else []
         header_row = rows[row_index + 2] if row_index + 2 < len(rows) else []
-        group_starts: list[tuple[int, str]] = []
+        group_starts: list[tuple[int, str, str | None, float | None]] = []
 
         for column_index, value in enumerate(group_row):
             match = re.search(r"(\d+)\s*-\s*Bin", str(value), re.IGNORECASE)
             if match is not None:
-                group_starts.append((column_index, f"BINS{int(match.group(1)):02d}"))
+                group_roughness_key, group_roughness = extract_roughness_from_text(str(value))
+                group_starts.append((
+                    column_index,
+                    f"BINS{int(match.group(1)):02d}",
+                    group_roughness_key or sheet_roughness_key,
+                    group_roughness if group_roughness is not None else sheet_roughness,
+                ))
 
-        group_starts.append((len(header_row), "END"))
+        group_starts.append((len(header_row), "END", None, None))
 
         for group_index in range(len(group_starts) - 1):
-            start_column, bin_set = group_starts[group_index]
+            start_column, bin_set, roughness_key, roughness = group_starts[group_index]
             end_column = group_starts[group_index + 1][0]
             column_names = [normalize_grid_convergence_column(value) for value in header_row[start_column:end_column]]
             data_index = row_index + 3
@@ -1016,16 +1062,23 @@ def parse_icing_grid_convergence_sheet(result: TecplotData, sheet_name: str, row
                     break
 
                 bin_label = rows[data_index][start_column] if start_column < len(rows[data_index]) else ""
-                is_combined_row = re.search(r"Combined", str(bin_label), re.IGNORECASE) is not None
+                is_combined_row = (
+                    re.search(r"Combined", str(first_cell), re.IGNORECASE) is not None
+                    or re.search(r"Combined", str(bin_label), re.IGNORECASE) is not None
+                )
                 bin_number = to_float_or_none(bin_label)
 
                 if is_combined_row or bin_number is not None:
                     parsed_row: dict[str, Any] = {
                         "N": float(level_number),
                         "GRID_LEVEL": f"L{level_number}",
+                        "SOURCE_SHEET": sheet_name,
+                        "SOURCE_REQUIREMENT": xlsx_sheet_requirement(sheet_name),
                         "BIN_SET": bin_set,
                         "BIN": bin_number if bin_number is not None else -999.0,
                         "DIAMETER": -999.0,
+                        "ROUGHNESS_KEY": roughness_key or "",
+                        "ROUGHNESS_HEIGHT": roughness if roughness is not None else -999.0,
                         "WATER_MASS": -999.0,
                         "ICE_MASS": -999.0,
                         "WATER_EVAP_MASS": -999.0,
@@ -1047,22 +1100,25 @@ def parse_icing_grid_convergence_sheet(result: TecplotData, sheet_name: str, row
                             parsed_row[column_name] = cell_value
 
                     has_mass_data = any(parsed_row[column] != -999.0 for column in ["WATER_MASS", "ICE_MASS", "WATER_EVAP_MASS"])
+                    group_key = (bin_set, roughness_key)
 
                     if is_combined_row and has_mass_data:
-                        rows_by_bin_set.setdefault(bin_set, []).append(parsed_row)
+                        rows_by_bin_set.setdefault(group_key, []).append(parsed_row)
                     elif bin_number is not None and parsed_row["DIAMETER"] != -999.0 and has_mass_data:
-                        rows_by_diameter_bin_set.setdefault(bin_set, []).append(parsed_row)
+                        rows_by_diameter_bin_set.setdefault(group_key, []).append(parsed_row)
 
                 data_index += 1
 
         row_index += 1
 
-    for bin_set, zone_rows in rows_by_bin_set.items():
-        zone_name = f"{slug_from_text(sheet_name)}_Icing_{bin_set}"
+    for (bin_set, roughness_key), zone_rows in rows_by_bin_set.items():
+        roughness_suffix = f"_roughness_{roughness_key}" if roughness_key else ""
+        zone_name = f"{slug_from_text(sheet_name)}_Icing_{bin_set}{roughness_suffix}"
         add_grid_convergence_zone(result, zone_name, zone_rows)
 
-    for bin_set, zone_rows in rows_by_diameter_bin_set.items():
-        zone_name = f"{slug_from_text(sheet_name)}_Icing_{bin_set}_by_diameter"
+    for (bin_set, roughness_key), zone_rows in rows_by_diameter_bin_set.items():
+        roughness_suffix = f"_roughness_{roughness_key}" if roughness_key else ""
+        zone_name = f"{slug_from_text(sheet_name)}_Icing_{bin_set}{roughness_suffix}_by_diameter"
         add_grid_convergence_zone(result, zone_name, zone_rows)
 
 
@@ -1315,6 +1371,11 @@ def attach_file_to_participant(participant: Participant, file_path: Path, defaul
     Grid convergence files are stored directly under the case because they are
     not specific to one grid level.
     """
+    if file_path.name.startswith("~$"):
+        return
+    if file_path.name.lower().endswith("old.xlsx"):
+        return
+
     file_type = identify_file_type(file_path.name)
     if file_type == "sMap":
         return
