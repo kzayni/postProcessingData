@@ -37,7 +37,11 @@
     <section class="plot-subsection">
       <h3>TC_NACA0012_AE3933 | L3</h3>
       
-    <section class="plot-subsection">
+    <section class="plot-filter-scope cutdata-filter-scope">
+      <h3>cutData</h3>
+      <div class="variable-filter-controls" data-filter-title="cutData variables"></div>
+      
+    <section class="plot-subsection" data-variable-key="cp_vs_x" data-variable-label="Cp vs X">
       <h4>Cp vs X</h4>
       <p class="plot-description">Pressure coefficient along the selected surface cut(s). Distribution: BINS03. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -56,7 +60,7 @@
             
     </section>
     
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="htc_vs_s" data-variable-label="HTC vs s">
       <h4>HTC vs s</h4>
       <p class="plot-description">Heat-transfer coefficient along the selected surface cut(s). The no-roughness HTC is plotted as the smooth roughness condition when available. Distribution: BINS03. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -75,7 +79,7 @@
             
     </section>
     
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="beta_bins03_vs_s" data-variable-label="Collection Efficiency vs s | BINS03">
       <h4>Collection Efficiency vs s | BINS03</h4>
       <p class="plot-description">Collection efficiency for the 3-bin droplet distribution. Distribution: BINS03. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -94,7 +98,7 @@
             
     </section>
     
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="beta_bins07_vs_s" data-variable-label="Collection Efficiency vs s | BINS07">
       <h4>Collection Efficiency vs s | BINS07</h4>
       <p class="plot-description">Collection efficiency for the 7-bin droplet distribution. Distribution: BINS07. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -113,7 +117,7 @@
             
     </section>
     
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="beta_bins15_vs_s" data-variable-label="Collection Efficiency vs s | BINS15">
       <h4>Collection Efficiency vs s | BINS15</h4>
       <p class="plot-description">Collection efficiency for the 15-bin droplet distribution. Distribution: BINS15. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -132,7 +136,7 @@
             
     </section>
     
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="surface_temperature_vs_s" data-variable-label="Surface temperature vs s">
       <h4>Surface temperature vs s</h4>
       <p class="plot-description">Surface temperature along the selected surface cut(s). Distribution: BINS03. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -151,7 +155,7 @@
             
     </section>
     
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="freezing_fraction_vs_s" data-variable-label="Freezing fraction vs s">
       <h4>Freezing fraction vs s</h4>
       <p class="plot-description">Freezing fraction along the selected surface cut(s). Distribution: BINS03. Slice location(s): Y = 0.9144 m. Legend: PID.DID.</p>
       
@@ -170,7 +174,13 @@
             
     </section>
     
-    <section class="plot-subsection ice-shape-subsection">
+    </section>
+    
+    <section class="plot-filter-scope ice-shape-filter-scope">
+    <h3>Ice shape</h3>
+    <div class="variable-filter-controls" data-filter-title="Ice-shape variables"></div>
+
+    <section class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
       <h4>Single-layer ice shape</h4>
       <p class="plot-description">Single-layer ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain SINGLE_LAYER. The clean reference shape is drawn from R00_REFERENCE, and submitted ice shapes are drawn using X_ICED-Z_ICED. Slice location(s): Y = 0.9144 m. Bin set(s): BINSXX. Legend: PID.DID, bin set, and layer type.</p>
       
@@ -188,7 +198,7 @@
             
     </section>
 
-    <section class="plot-subsection ice-shape-subsection">
+    <section class="plot-subsection ice-shape-subsection" data-variable-key="multi_layer_final_ice_shape" data-variable-label="Multi-layer final ice shape">
       <h4>Multi-layer final ice shape</h4>
       <p class="plot-description">Multi-layer final ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain FINAL_LAYER. Legacy zones without SINGLE_LAYER or FINAL_LAYER are kept in this final-layer plot. The clean reference shape is drawn from R00_REFERENCE. Slice location(s): Y = 0.9144 m. Bin set(s): BINSXX. Legend: PID.DID and layer/zone index.</p>
       
@@ -205,10 +215,80 @@
             </section>
             
     </section>
+    </section>
     
     </section>
     
         </main>
+        
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".plot-filter-scope").forEach((scope, scopeIndex) => {
+    const controls = scope.querySelector(":scope > .variable-filter-controls");
+    const sections = Array.from(scope.querySelectorAll(":scope > .plot-subsection[data-variable-key]"));
+
+    if (!controls || sections.length <= 1) {
+      if (controls) {
+        controls.hidden = true;
+      }
+      return;
+    }
+
+    const title = controls.dataset.filterTitle || "Variables";
+    const seen = new Map();
+
+    sections.forEach((section) => {
+      const key = section.dataset.variableKey || "";
+      const label = section.dataset.variableLabel || key;
+      if (key && !seen.has(key)) {
+        seen.set(key, label);
+      }
+    });
+
+    const checkboxHtml = Array.from(seen.entries()).map(([key, label], index) => {
+      const id = `variable-filter-${scopeIndex}-${index}`;
+      return `
+        <label class="variable-filter-option" for="${id}">
+          <input id="${id}" type="checkbox" value="${key}" checked />
+          <span>${label}</span>
+        </label>
+      `;
+    }).join("");
+
+    controls.innerHTML = `
+      <div class="variable-filter-header">
+        <span>${title}</span>
+        <button type="button" data-filter-action="all">All</button>
+        <button type="button" data-filter-action="none">None</button>
+      </div>
+      <div class="variable-filter-options">${checkboxHtml}</div>
+    `;
+
+    const update = () => {
+      const activeKeys = new Set(
+        Array.from(controls.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value)
+      );
+      sections.forEach((section) => {
+        section.hidden = !activeKeys.has(section.dataset.variableKey || "");
+      });
+    };
+
+    controls.addEventListener("change", update);
+    controls.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-filter-action]");
+      if (!button) {
+        return;
+      }
+      const checked = button.dataset.filterAction === "all";
+      controls.querySelectorAll("input[type='checkbox']").forEach((input) => {
+        input.checked = checked;
+      });
+      update();
+    });
+  });
+});
+</script>
+
         </body>
     </html>
     

@@ -430,7 +430,7 @@ def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec
         notes_html = '<ul class="plot-notes">' + "".join(f"<li>{escape(note)}</li>" for note in sorted(set(skipped_notes))) + "</ul>"
 
     return f"""
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">{escape(description)}</p>
       {notes_html}
@@ -448,8 +448,9 @@ def build_grid_convergence_section(participants, case_id: str) -> str:
         html += build_grid_convergence_plot_subsection(participants, case_id, plot_spec)
 
     return f"""
-    <section class="plot-subsection grid-convergence-section">
+    <section class="plot-subsection grid-convergence-section plot-filter-scope">
       <h3>Grid convergence</h3>
+      <div class="variable-filter-controls" data-filter-title="Grid-convergence variables"></div>
       {html}
     </section>
     """
@@ -565,7 +566,7 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
 
     if not groups:
         return f"""
-        <section class="plot-subsection">
+        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
           <h4>{escape(plot_spec["title"])}</h4>
           {empty_placeholder(title=plot_spec["title"], message="No diameter-resolved grid-convergence data were found yet for this case.")}
         </section>
@@ -594,7 +595,7 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
         """
 
     return f"""
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
         Diameter-resolved grid-convergence data. Each figure corresponds to one bin set and one droplet diameter. Legend: PID.
@@ -767,7 +768,7 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
 
     if not grid_levels:
         return f"""
-        <section class="plot-subsection">
+        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
           <h4>{escape(plot_spec["title"])}</h4>
           {empty_placeholder(title=plot_spec["title"], message="No combined icing grid-convergence data were found yet for this case.")}
         </section>
@@ -796,7 +797,7 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
         """
 
     return f"""
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
         Combined icing data from required sheets plotted against 1 / number of bins. Each figure corresponds to one grid level. Missing values equal to -999 are ignored. Legend: PID.
@@ -810,7 +811,7 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
 
     if not roughness_keys:
         return f"""
-        <section class="plot-subsection">
+        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
           <h4>{escape(plot_spec["title"])}</h4>
           {empty_placeholder(title=plot_spec["title"], message="No matching CFD gridConvergence variables were found yet for this case.")}
         </section>
@@ -839,7 +840,7 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
         """
 
     return f"""
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
         Grid-convergence data grouped by roughness condition. Missing values equal to -999 are ignored. Legend: PID.

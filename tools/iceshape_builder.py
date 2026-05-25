@@ -642,15 +642,20 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     )
 
     return f"""
-    <section class="plot-subsection ice-shape-subsection">
+    <section class="plot-filter-scope ice-shape-filter-scope">
+    <h3>Ice shape</h3>
+    <div class="variable-filter-controls" data-filter-title="Ice-shape variables"></div>
+
+    <section class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
       <h4>Single-layer ice shape</h4>
       <p class="plot-description">{escape(single_description)}</p>
       {single_figures_html}
     </section>
 
-    <section class="plot-subsection ice-shape-subsection">
+    <section class="plot-subsection ice-shape-subsection" data-variable-key="multi_layer_final_ice_shape" data-variable-label="Multi-layer final ice shape">
       <h4>Multi-layer final ice shape</h4>
       <p class="plot-description">{escape(multi_description)}</p>
       {multi_figures_html}
+    </section>
     </section>
     """

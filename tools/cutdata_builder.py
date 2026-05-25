@@ -569,7 +569,7 @@ def build_combined_beta_section(participants, case_id: str, grid_level: str) -> 
     if not cards_html:
         cards_html = empty_placeholder(title="Combined Beta", message="No matching cutData variables were found yet for this case/grid level.")
     return f"""
-    <section class="plot-subsection combined-beta-section">
+    <section class="plot-subsection combined-beta-section" data-variable-key="combined_beta" data-variable-label="Combined Beta">
       <h4>Combined Beta by participant</h4>
       <p class="plot-description">
         Each card corresponds to one participant dataset. Inside each card, BINS03, BINS07, and BINS15 are overlaid on the same Beta vs s figure. Participant cards are arranged three per row when space allows. Legends use only PID.DID.
@@ -639,7 +639,7 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
         notes_html = '<ul class="plot-notes">' + "".join(f"<li>{escape(note)}</li>" for note in sorted(set(all_skipped_notes))) + "</ul>"
 
     return f"""
-    <section class="plot-subsection">
+    <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">{escape(description)}</p>
       {notes_html}
@@ -657,7 +657,13 @@ def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) 
             html += build_combined_beta_section(participants, case_id, grid_level)
         else:
             html += build_plot_subsection(participants, case_id, grid_level, plot_spec)
-    return html
+    return f"""
+    <section class="plot-filter-scope cutdata-filter-scope">
+      <h3>cutData</h3>
+      <div class="variable-filter-controls" data-filter-title="cutData variables"></div>
+      {html}
+    </section>
+    """
 
 def collect_cutdata_roughness_keys(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any], slice_filter: float | None = None) -> list[str]:
     roughness_keys: set[str] = set()

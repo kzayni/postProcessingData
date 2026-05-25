@@ -27,6 +27,76 @@ ROOT_DIR = Path(".")
 OUTPUT_HTML = ROOT_DIR / "index.html"
 PAGES_DIR = ROOT_DIR / "PAGES"
 
+VARIABLE_FILTER_SCRIPT = """
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".plot-filter-scope").forEach((scope, scopeIndex) => {
+    const controls = scope.querySelector(":scope > .variable-filter-controls");
+    const sections = Array.from(scope.querySelectorAll(":scope > .plot-subsection[data-variable-key]"));
+
+    if (!controls || sections.length <= 1) {
+      if (controls) {
+        controls.hidden = true;
+      }
+      return;
+    }
+
+    const title = controls.dataset.filterTitle || "Variables";
+    const seen = new Map();
+
+    sections.forEach((section) => {
+      const key = section.dataset.variableKey || "";
+      const label = section.dataset.variableLabel || key;
+      if (key && !seen.has(key)) {
+        seen.set(key, label);
+      }
+    });
+
+    const checkboxHtml = Array.from(seen.entries()).map(([key, label], index) => {
+      const id = `variable-filter-${scopeIndex}-${index}`;
+      return `
+        <label class="variable-filter-option" for="${id}">
+          <input id="${id}" type="checkbox" value="${key}" checked />
+          <span>${label}</span>
+        </label>
+      `;
+    }).join("");
+
+    controls.innerHTML = `
+      <div class="variable-filter-header">
+        <span>${title}</span>
+        <button type="button" data-filter-action="all">All</button>
+        <button type="button" data-filter-action="none">None</button>
+      </div>
+      <div class="variable-filter-options">${checkboxHtml}</div>
+    `;
+
+    const update = () => {
+      const activeKeys = new Set(
+        Array.from(controls.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value)
+      );
+      sections.forEach((section) => {
+        section.hidden = !activeKeys.has(section.dataset.variableKey || "");
+      });
+    };
+
+    controls.addEventListener("change", update);
+    controls.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-filter-action]");
+      if (!button) {
+        return;
+      }
+      const checked = button.dataset.filterAction === "all";
+      controls.querySelectorAll("input[type='checkbox']").forEach((input) => {
+        input.checked = checked;
+      });
+      update();
+    });
+  });
+});
+</script>
+"""
+
 def load_participants(root_dir: Path, highlight_points_by_case: HighlightPointsByCase | None = None, clean_s_cache: bool = False):
     participants = scan_all_participants(root_dir)
     for participant in participants:
@@ -355,6 +425,7 @@ def build_page_html(title: str, body_html: str, stylesheet_href: str = "style.cs
             {nav_html}
             {body_html}
         </main>
+        {VARIABLE_FILTER_SCRIPT}
         </body>
     </html>
     """
