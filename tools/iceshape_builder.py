@@ -77,7 +77,6 @@ ICE_SHAPE_AXIS_SETTINGS = {
     },
 }
 
-
 def slugify(text: str) -> str:
     text = text.strip().lower()
     text = re.sub(r"[^a-z0-9]+", "_", text)
@@ -92,13 +91,120 @@ def find_column_case_insensitive(columns, candidates: list[str]) -> str | None:
     return None
 
 
-def participant_label(participant, dataset_data) -> str:
+def find_submitted_ice_xz_columns(columns) -> tuple[str | None, str | None]:
+    """Return X/Z plotting columns for submitted ice-shape zones.
+
+    Older submissions included both clean and iced coordinates:
+        X, Y, Z, X_ICED, Y_ICED, Z_ICED
+
+    Current submissions include only the iced coordinates. In that format, X/Z
+    or CoordinateX/CoordinateZ are already the ice-shape coordinates; the clean
+    trace is loaded separately from R00_REFERENCE.
+    """
+    x_column = find_column_case_insensitive(columns, ["X_ICED", "X_iced", "CoordinateX_Iced", "CoordinateX_iced"])
+    z_column = find_column_case_insensitive(columns, ["Z_ICED", "Z_iced", "CoordinateZ_Iced", "CoordinateZ_iced"])
+
+    if x_column is not None and z_column is not None:
+        return x_column, z_column
+
+    return (
+        find_column_case_insensitive(columns, ["X", "CoordinateX"]),
+        find_column_case_insensitive(columns, ["Z", "CoordinateZ"]),
+    )
+
+
+def valid_submitted_ice_shape_rows(dataframe: pd.DataFrame, x_column: str, z_column: str) -> pd.DataFrame:
+    """Drop placeholder rows before plotting submitted ice-shape coordinates."""
+    x_values = pd.to_numeric(dataframe[x_column], errors="coerce")
+    z_values = pd.to_numeric(dataframe[z_column], errors="coerce")
+    valid_mask = x_values.notna() & z_values.notna() & (x_values > -998.0) & (z_values > -998.0)
+    return dataframe.loc[valid_mask]
+
+
+def extract_roughness_key_from_zone_name(zone_name: str) -> str:
+    text = zone_name.strip()
+
+    if re.search(r"(?:^|_)KS_(?:0|0p0|0\.0|smooth|none)(?:mm|m)?(?:_|$)", text, re.IGNORECASE):
+        return "smooth"
+
+    if re.search(r"(?:^|_)(?:KS_)?XX(?:mm|m)?(?:_|$)", text, re.IGNORECASE):
+        return "default_roughness"
+
+    if re.search(r"(?:^|_)(?:VARIABLE_ROUGHNESS|VAR_ROUGHNESS|KS_VARIABLE|KS_VAR)(?:_|$)", text, re.IGNORECASE):
+        return "variable_roughness"
+
+    match = re.search(r"(?:^|_)KS_(?P<value>[0-9]+(?:p[0-9]+|\.[0-9]+)?)(?P<unit>mm|m)?(?:_|$)", text, re.IGNORECASE)
+    if match is not None:
+        value = match.group("value").replace("p", ".")
+        unit = (match.group("unit") or "mm").lower()
+
+        if unit == "m":
+            value_mm = float(value) * 1000.0
+            return f"{value_mm:g}mm"
+
+        return f"{float(value):g}mm"
+
+    return "default_roughness"
+
+
+def format_roughness_title(roughness_key: str | None) -> str:
+    if roughness_key is None:
+        return "Default roughness"
+
+    if roughness_key == "smooth":
+        return "No Roughness"
+
+    if roughness_key == "variable_roughness":
+        return "Variable roughness"
+
+    if roughness_key in {"default_roughness", "unspecified_roughness"}:
+        return "Default roughness"
+
+    if roughness_key.endswith("mm"):
+        return f"Roughness height = {roughness_key[:-2]} mm"
+
+    return roughness_key
+
+
+def roughness_sort_key(roughness_key: str) -> tuple[int, float, str]:
+    if roughness_key == "smooth":
+        return (0, 0.0, roughness_key)
+
+    if roughness_key.endswith("mm"):
+        try:
+            return (1, float(roughness_key[:-2]), roughness_key)
+        except ValueError:
+            pass
+
+    if roughness_key == "variable_roughness":
+        return (2, 0.0, roughness_key)
+
+    return (3, 0.0, roughness_key)
+
+
+def format_roughness_list(roughness_keys: set[str]) -> str:
+    if not roughness_keys:
+        return "Default roughness"
+    return ", ".join(format_roughness_title(key) for key in sorted(roughness_keys, key=roughness_sort_key))
+
+
+def format_participant_roughness_summary(summary: dict[str, set[str]]) -> str:
+    if not summary:
+        return "Detected roughness by participant: none found."
+    entries = [f"{participant_id}: {format_roughness_list(roughness_keys)}" for participant_id, roughness_keys in sorted(summary.items())]
+    return "Detected roughness by participant: " + "; ".join(entries) + "."
+
+
+def participant_label(participant, dataset_data, grid_data=None) -> str:
     """Return the legend label for one participant/grid-level dataset.
 
     Dataset IDs now live under:
         participant.cases[case_id].grid_levels[grid_level].datasets[dataset_id]
-    so the label is still PID.DID, but DID is local to the case/grid level.
+    so DID is local to the case/grid level. Hide it when there is only one
+    dataset for the participant in that grid level.
     """
+    if grid_data is not None and len(grid_data.datasets) <= 1:
+        return f"{participant.participant_id}"
     return f"{participant.participant_id}.{dataset_data.dataset_id}"
 
 
@@ -110,8 +216,25 @@ def plotly_config(filename: str) -> dict[str, Any]:
     }
 
 
+DEFER_PLOTLY_DIR: Path | None = None
+
+
+def set_defer_plotly_html(output_dir: Path | None) -> None:
+    global DEFER_PLOTLY_DIR
+    DEFER_PLOTLY_DIR = output_dir
+
+
 def figure_to_html_div(fig: go.Figure, filename: str) -> str:
-    return fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
+    figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
+    if DEFER_PLOTLY_DIR is not None:
+        DEFER_PLOTLY_DIR.mkdir(parents=True, exist_ok=True)
+        fragment_path = DEFER_PLOTLY_DIR / f"{filename}.html"
+        fragment_path.write_text(
+            f'<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>html,body{{margin:0;background:white}} .plotly-graph-div{{width:100%}}</style></head><body>{figure_html}</body></html>',
+            encoding="utf-8",
+        )
+        return f'<iframe class="plotly-lazy-frame" data-plot-src="PLOTS/{escape(filename)}.html" title="{escape(filename)}"></iframe><div class="plot-loading">Plot queued…</div>'
+    return figure_html
 
 
 def empty_placeholder(title: str, message: str) -> str:
@@ -258,6 +381,53 @@ def detected_ice_shape_bins(participants, case_id: str, grid_level: str) -> list
     return sorted(bins_ids, key=bin_sort_key)
 
 
+def detected_ice_shape_roughness_keys(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None) -> list[str]:
+    roughness_keys: set[str] = set()
+
+    for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
+        if dataset_data.ice_shape_data is None:
+            continue
+
+        for zone_name, zone in dataset_data.ice_shape_data.zones.items():
+            zone_info = parse_ipw3_ice_shape_zone_name(zone_name)
+            if zone_info is None:
+                continue
+            if bins_filter is not None and zone_info["bins"] != bins_filter:
+                continue
+            slice_position = decode_slice_position(zone_info["slice"]) if zone_info["slice"] else None
+            if not slice_matches_filter(slice_position, slice_filter):
+                continue
+            x_column, z_column = find_submitted_ice_xz_columns(zone.data.columns)
+            if x_column is None or z_column is None:
+                continue
+            if valid_submitted_ice_shape_rows(zone.data, x_column, z_column).empty:
+                continue
+            roughness_keys.add(extract_roughness_key_from_zone_name(zone_name))
+
+    preferred_order = ["smooth", "0.5mm", "1mm", "1.5mm", "variable_roughness", "default_roughness", "unspecified_roughness"]
+    ordered = [key for key in preferred_order if key in roughness_keys]
+    remaining = sorted(roughness_keys - set(ordered), key=roughness_sort_key)
+    return ordered + remaining
+
+
+def collect_ice_shape_participant_roughness_summary(participants, case_id: str, grid_level: str) -> dict[str, set[str]]:
+    summary: dict[str, set[str]] = {}
+
+    for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
+        if dataset_data.ice_shape_data is None:
+            continue
+
+        for zone_name, zone in dataset_data.ice_shape_data.zones.items():
+            x_column, z_column = find_submitted_ice_xz_columns(zone.data.columns)
+            if x_column is None or z_column is None:
+                continue
+            if valid_submitted_ice_shape_rows(zone.data, x_column, z_column).empty:
+                continue
+            summary.setdefault(participant.participant_id, set()).add(extract_roughness_key_from_zone_name(zone_name))
+
+    return summary
+
+
 def clean_reference_path_for_case(case_id: str) -> Path | None:
     if "ONERAM6" in case_id.upper():
         return Path("R00_REFERENCE") / "ONERAM6_CLEAN.dat"
@@ -385,7 +555,7 @@ def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float 
     return trace_count, slice_positions
 
 
-def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
+def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
     """Build the single-layer ice-shape figure from iceShape zones.
 
     Important distinction:
@@ -406,7 +576,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
         if dataset_data.ice_shape_data is None:
             continue
 
-        label = participant_label(participant, dataset_data)
+        label = participant_label(participant, dataset_data, grid_data)
         color = participant_color(participant.participant_id)
 
         for zone_index, (zone_name, zone) in enumerate(dataset_data.ice_shape_data.zones.items(), start=1):
@@ -416,6 +586,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 bins_id = zone_info["bins"]
                 shape_type = zone_info["type"]
                 shape_role = zone_info["shape_role"]
+                roughness_key = extract_roughness_key_from_zone_name(zone_name)
                 slice_position = None
 
                 if zone_info["slice"]:
@@ -430,6 +601,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 bins_id = "not specified"
                 shape_type = "unknown"
                 shape_role = ""
+                roughness_key = "default_roughness"
                 slice_text = "unknown"
                 slice_position = None
 
@@ -437,23 +609,27 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 continue
             if bins_filter is not None and bins_id != bins_filter:
                 continue
+            if roughness_filter is not None and roughness_key != roughness_filter:
+                continue
 
             if not slice_matches_filter(slice_position, slice_filter):
                 continue
             if slice_position is not None:
                 slice_positions.append(slice_position)
 
-            x_iced_column = find_column_case_insensitive(zone.data.columns, ["X_ICED", "X_iced", "CoordinateX_Iced", "CoordinateX_iced"])
-            z_iced_column = find_column_case_insensitive(zone.data.columns, ["Z_ICED", "Z_iced", "CoordinateZ_Iced", "CoordinateZ_iced"])
+            x_iced_column, z_iced_column = find_submitted_ice_xz_columns(zone.data.columns)
             if x_iced_column is None or z_iced_column is None:
+                continue
+            plot_data = valid_submitted_ice_shape_rows(zone.data, x_iced_column, z_iced_column)
+            if plot_data.empty:
                 continue
 
             trace_name = label
 
             fig.add_trace(
                 go.Scatter(
-                    x=zone.data[x_iced_column],
-                    y=zone.data[z_iced_column],
+                    x=plot_data[x_iced_column],
+                    y=plot_data[z_iced_column],
                     mode="lines",
                     name=trace_name,
                     legendgroup=label,
@@ -466,6 +642,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                         f"Shape type: {escape(str(shape_type))}<br>"
                         f"Shape role: {escape(str(shape_role))}<br>"
                         f"Bins: {escape(str(bins_id))}<br>"
+                        f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
                         f"Slice: {escape(str(slice_text))}<br>"
                         f"Zone: {escape(zone_name)}<br>"
                         f"{escape(x_iced_column)}=%{{x}}<br>"
@@ -489,7 +666,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
     return fig, trace_count, slice_positions
 
 
-def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
+def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
     fig = go.Figure()
     _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter)
     trace_count = 0
@@ -499,7 +676,7 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
         if dataset_data.ice_shape_data is None:
             continue
 
-        label = participant_label(participant, dataset_data)
+        label = participant_label(participant, dataset_data, grid_data)
         color = participant_color(participant.participant_id)
         num_layers = dataset_data.ice_shape_data.auxdata.get("NUM_LAYERS", "unknown")
         data_type = dataset_data.ice_shape_data.auxdata.get("DATA_TYPE", "unknown")
@@ -512,6 +689,7 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 shape_type = zone_info["type"]
                 shape_role = zone_info["shape_role"]
                 layer_id = zone_info["layer"] or f"zone {zone_index}"
+                roughness_key = extract_roughness_key_from_zone_name(zone_name)
                 slice_position = None
                 if zone_info["slice"]:
                     slice_position = decode_slice_position(zone_info["slice"])
@@ -526,6 +704,7 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 shape_type = "unknown"
                 shape_role = ""
                 layer_id = f"zone {zone_index}"
+                roughness_key = "default_roughness"
                 slice_text = "unknown"
                 slice_position = None
 
@@ -533,20 +712,24 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 continue
             if bins_filter is not None and bins_id != bins_filter:
                 continue
+            if roughness_filter is not None and roughness_key != roughness_filter:
+                continue
 
             if not slice_matches_filter(slice_position, slice_filter):
                 continue
             if slice_position is not None:
                 slice_positions.append(slice_position)
 
-            x_iced_column = find_column_case_insensitive(zone.data.columns, ["X_ICED", "X_iced", "CoordinateX_Iced", "CoordinateX_iced"])
-            z_iced_column = find_column_case_insensitive(zone.data.columns, ["Z_ICED", "Z_iced", "CoordinateZ_Iced", "CoordinateZ_iced"])
+            x_iced_column, z_iced_column = find_submitted_ice_xz_columns(zone.data.columns)
 
             if x_iced_column is None or z_iced_column is None:
                 continue
+            plot_data = valid_submitted_ice_shape_rows(zone.data, x_iced_column, z_iced_column)
+            if plot_data.empty:
+                continue
 
             trace_name = label if layer_id.startswith("zone ") else f"{label} {layer_id}"
-            fig.add_trace(go.Scatter(x=zone.data[x_iced_column], y=zone.data[z_iced_column], mode="lines", name=trace_name, legendgroup=label, line=dict(color=color), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
+            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode="lines", name=trace_name, legendgroup=label, line=dict(color=color), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
             trace_count += 1
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
@@ -575,6 +758,9 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     configured_bins = detected_ice_shape_bins(participants, case_id, grid_level)
     if not configured_bins:
         configured_bins = ["BINSXX"]
+    configured_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level)
+    if not configured_roughness:
+        configured_roughness = [None]
 
     for slice_position in configured_slices:
         slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
@@ -582,54 +768,69 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
 
         for bins_id in configured_bins:
             bins_slug = f"_{bins_id.lower()}"
-            bin_title = f"{slice_title} | {bins_id}"
+            figure_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
+            if not figure_roughness:
+                figure_roughness = [None]
 
-            single_fig, single_trace_count, single_slice_positions = build_single_layer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
-            if single_trace_count == 0:
-                single_figure_html = empty_placeholder(
-                    title=f"Single-layer ice shape | {bin_title}",
-                    message="No matching SINGLE_LAYER iceShape zones were found yet for this case/grid level, slice, and bin set.",
-                )
-            else:
-                single_filename = f"{slugify(case_id)}_{grid_level}_single_layer_ice_shape{slice_slug}{bins_slug}"
-                single_figure_html = figure_to_html_div(single_fig, filename=single_filename)
+            for roughness_key in figure_roughness:
+                roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
+                roughness_title = format_roughness_title(roughness_key)
+                bin_title = f"{slice_title} | {bins_id} | {roughness_title}"
+                slice_key = slugify(slice_title)
+                roughness_key_text = roughness_key or "unspecified"
+                roughness_filter_key = slugify(roughness_key_text)
+                roughness_filter_label = roughness_title
 
-            single_figures_html += f"""
-            <section class="slice-plot-group">
-              <h5>{escape(bin_title)}</h5>
-              <div class="plot-container">
-                {single_figure_html}
-              </div>
-            </section>
-            """
+                single_fig, single_trace_count, single_slice_positions = build_single_layer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id, roughness_filter=roughness_key)
+                if single_trace_count == 0:
+                    single_figure_html = empty_placeholder(
+                        title=f"Single-layer ice shape | {bin_title}",
+                        message="No matching SINGLE_LAYER iceShape zones were found yet for this case/grid level, slice, bin set, and roughness.",
+                    )
+                else:
+                    single_filename = f"{slugify(case_id)}_{grid_level}_single_layer_ice_shape{slice_slug}{bins_slug}{roughness_slug}"
+                    single_figure_html = figure_to_html_div(single_fig, filename=single_filename)
 
-            multi_fig, multi_trace_count, multi_slice_positions = build_multilayer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
-            if multi_trace_count == 0:
-                multi_figure_html = empty_placeholder(
-                    title=f"Multi-layer final ice shape | {bin_title}",
-                    message="No matching FINAL_LAYER iceShape zones were found yet for this case/grid level, slice, and bin set.",
-                )
-            else:
-                multi_filename = f"{slugify(case_id)}_{grid_level}_multilayer_ice_shape{slice_slug}{bins_slug}"
-                multi_figure_html = figure_to_html_div(multi_fig, filename=multi_filename)
+                single_figures_html += f"""
+                <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
+                  <h5>{escape(bin_title)}</h5>
+                  <div class="plot-container">
+                    {single_figure_html}
+                  </div>
+                </section>
+                """
 
-            multi_figures_html += f"""
-            <section class="slice-plot-group">
-              <h5>{escape(bin_title)}</h5>
-              <div class="plot-container">
-                {multi_figure_html}
-              </div>
-            </section>
-            """
+                multi_fig, multi_trace_count, multi_slice_positions = build_multilayer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id, roughness_filter=roughness_key)
+                if multi_trace_count == 0:
+                    multi_figure_html = empty_placeholder(
+                        title=f"Multi-layer final ice shape | {bin_title}",
+                        message="No matching FINAL_LAYER iceShape zones were found yet for this case/grid level, slice, bin set, and roughness.",
+                    )
+                else:
+                    multi_filename = f"{slugify(case_id)}_{grid_level}_multilayer_ice_shape{slice_slug}{bins_slug}{roughness_slug}"
+                    multi_figure_html = figure_to_html_div(multi_fig, filename=multi_filename)
+
+                multi_figures_html += f"""
+                <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
+                  <h5>{escape(bin_title)}</h5>
+                  <div class="plot-container">
+                    {multi_figure_html}
+                  </div>
+                </section>
+                """
 
     configured_slice_text = format_slice_positions([value for value in configured_slices if value is not None])
     configured_bins_text = ", ".join(configured_bins)
+    configured_roughness_text = ", ".join(format_roughness_title(value) for value in configured_roughness)
+    participant_roughness_text = format_participant_roughness_summary(collect_ice_shape_participant_roughness_summary(participants, case_id, grid_level))
     single_description = (
         "Single-layer ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain SINGLE_LAYER. "
-        "The clean reference shape is drawn from R00_REFERENCE, and submitted ice shapes are drawn using X_ICED-Z_ICED. "
+        "The clean reference shape is drawn from R00_REFERENCE, and submitted ice-shape files are treated as iced coordinates. "
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
-        "Legend: PID.DID, bin set, and layer type."
+        f"Roughness condition(s): {configured_roughness_text}. "
+        f"{participant_roughness_text} "
+        "Legend: PID or PID.DID, bin set, and layer type."
     )
 
     multi_description = (
@@ -638,13 +839,16 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         "The clean reference shape is drawn from R00_REFERENCE. "
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
-        "Legend: PID.DID and layer/zone index."
+        f"Roughness condition(s): {configured_roughness_text}. "
+        f"{participant_roughness_text} "
+        "Legend: PID or PID.DID and layer/zone index."
     )
 
     return f"""
     <section class="plot-filter-scope ice-shape-filter-scope">
     <h3>Ice shape</h3>
     <div class="variable-filter-controls" data-filter-title="Ice-shape variables"></div>
+    <div class="variable-filter-controls ice-shape-filter-controls"></div>
 
     <section class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
       <h4>Single-layer ice shape</h4>

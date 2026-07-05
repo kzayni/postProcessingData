@@ -25,6 +25,10 @@ VALID_CASES = {
 }
 
 CASE_ALIASES = {
+    "TC_NACA0012_3932": "TC_NACA0012_AE3932",
+    "NACA0012_3932": "TC_NACA0012_AE3932",
+    "TC_NACA0012_3933": "TC_NACA0012_AE3933",
+    "NACA0012_3933": "TC_NACA0012_AE3933",
     "TC_ONERA_M6": "TC_ONERAM6",
 }
 
@@ -1295,7 +1299,13 @@ def parse_submission_folder_name(folder_name: str) -> tuple[str, Optional[str], 
     match = pattern.match(folder_name)
 
     if match is None:
-        return folder_name, None, None
+        case_id = extract_case_id_from_name(folder_name)
+        dataset_match = re.search(r"(?:^|_)(D?\d{2})(?:_|$)", folder_name, re.IGNORECASE)
+
+        if case_id is not None and dataset_match is not None:
+            return folder_name, case_id, normalize_dataset_id(dataset_match.group(1))
+
+        return folder_name, case_id, None
 
     return match.group("pid"), canonical_case_id(match.group("case")), normalize_dataset_id(match.group("dataset"))
 
@@ -1331,6 +1341,16 @@ def extract_grid_level_from_name(name: str) -> Optional[str]:
 
     # Return it anyway so that unexpected levels can still be inspected.
     return grid_level
+
+
+def extract_dataset_id_from_name(name: str) -> Optional[str]:
+    """Extract an explicit dataset ID such as D01 from a file or folder name."""
+    match = re.search(r"(?:^|_)(D\d+)(?:_|\.|$)", name, re.IGNORECASE)
+
+    if match is None:
+        return None
+
+    return normalize_dataset_id(match.group(1))
 
 
 def identify_file_type(name: str) -> Optional[str]:
@@ -1405,7 +1425,7 @@ def attach_file_to_participant(participant: Participant, file_path: Path, defaul
 
     case_id = extract_case_id_from_name(file_path.name) or default_case_id
     grid_level = extract_grid_level_from_name(file_path.name)
-    dataset_id = default_dataset_id or "DXX"
+    dataset_id = extract_dataset_id_from_name(file_path.name) or default_dataset_id or "DXX"
 
     if file_type == "gridConvergence" and file_path.suffix.lower() == ".xlsx" and case_id is None:
         detected_case_ids = detect_xlsx_grid_convergence_cases(file_path)

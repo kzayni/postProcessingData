@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 import re
 
+import pandas as pd
 import plotly.graph_objects as go
 
 from .gatherParticipantData import iter_case_data
@@ -130,6 +131,20 @@ def find_column_case_insensitive(columns, candidates: list[str]) -> str | None:
     return None
 
 
+def valid_numeric_rows(dataframe, *columns: str, positive_columns: set[str] | None = None):
+    positive_columns = positive_columns or set()
+    valid_mask = pd.Series(True, index=dataframe.index)
+
+    for column in columns:
+        values = pd.to_numeric(dataframe[column], errors="coerce")
+        column_mask = values.notna() & (values > -998.0)
+        if column in positive_columns:
+            column_mask &= values > 0.0
+        valid_mask &= column_mask
+
+    return dataframe.loc[valid_mask]
+
+
 def case_ordered_y_candidates(case_id: str, candidates: list[str]) -> list[str]:
     """Prefer the pitching-moment component used by each test case."""
     if "CMY" not in candidates or "CMZ" not in candidates:
@@ -208,8 +223,25 @@ def plotly_config(filename: str) -> dict[str, Any]:
     }
 
 
+DEFER_PLOTLY_DIR: Path | None = None
+
+
+def set_defer_plotly_html(output_dir: Path | None) -> None:
+    global DEFER_PLOTLY_DIR
+    DEFER_PLOTLY_DIR = output_dir
+
+
 def figure_to_html_div(fig: go.Figure, filename: str) -> str:
-    return fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
+    figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
+    if DEFER_PLOTLY_DIR is not None:
+        DEFER_PLOTLY_DIR.mkdir(parents=True, exist_ok=True)
+        fragment_path = DEFER_PLOTLY_DIR / f"{filename}.html"
+        fragment_path.write_text(
+            f'<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>html,body{{margin:0;background:white}} .plotly-graph-div{{width:100%}}</style></head><body>{figure_html}</body></html>',
+            encoding="utf-8",
+        )
+        return f'<iframe class="plotly-lazy-frame" data-plot-src="PLOTS/{escape(filename)}.html" title="{escape(filename)}"></iframe><div class="plot-loading">Plot queued…</div>'
+    return figure_html
 
 
 def empty_placeholder(title: str, message: str) -> str:
@@ -290,8 +322,7 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                 continue
             participant_had_variable = True
 
-            data = zone.data[[x_column, y_column]].copy()
-            data = data[(data[x_column] > 0.0) & (data[x_column] != -999.0) & (data[y_column] != -999.0)]
+            data = valid_numeric_rows(zone.data[[x_column, y_column]].copy(), x_column, y_column, positive_columns={x_column})
             data = add_grid_spacing_column(data, case_id, x_column, grid_column=grid_column)
             
             if data.empty:
@@ -307,7 +338,7 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
 
                 working_data = zone.data.loc[data.index, [x_column, y_column, diameter_column] + ([bin_set_column] if bin_set_column is not None else [])].copy()
                 working_data = add_grid_spacing_column(working_data, case_id, x_column, grid_column=grid_column)
-                working_data = working_data[working_data[diameter_column] != -999.0]
+                working_data = valid_numeric_rows(working_data, diameter_column)
 
                 for diameter, diameter_data in working_data.groupby(diameter_column):
                     diameter_data = diameter_data.sort_values(GRID_SPACING_COLUMN)
@@ -423,7 +454,7 @@ def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec
         filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}"
         figure_html = figure_to_html_div(fig, filename=filename)
 
-    description = "Grid-convergence data from the case-level gridConvergence file. Missing values equal to -999 are ignored. Legend: PID."
+    description = "Grid-convergence data from the case-level gridConvergence file. Missing values equal to -999 are ignored. Legend: Participant ID."
 
     notes_html = ""
     if skipped_notes:
@@ -478,7 +509,7 @@ def collect_diameter_groups(participants, case_id: str, plot_spec: dict[str, Any
                 bin_set = str(row[bin_set_column])
                 bin_number = row[bin_column]
 
-                if diameter == -999.0 or bin_number == -999.0:
+                if diameter <= -998.0 or bin_number <= -998.0:
                     continue
 
                 groups.add((bin_set, float(bin_number), float(diameter)))
@@ -512,8 +543,7 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
             if x_column is None or y_column is None or diameter_column is None or bin_set_column is None or bin_column is None:
                 continue
 
-            data = zone.data.copy()
-            data = data[(data[x_column] > 0.0) & (data[x_column] != -999.0) & (data[y_column] != -999.0)]
+            data = valid_numeric_rows(zone.data.copy(), x_column, y_column, positive_columns={x_column})
             data = data[data[bin_set_column].astype(str) == str(target_bin_set)]
             data = data[data[bin_column].astype(float) == float(target_bin_number)]
             data = data[data[diameter_column].astype(float) == float(target_diameter)]
@@ -598,7 +628,7 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
-        Diameter-resolved grid-convergence data. Each figure corresponds to one bin set and one droplet diameter. Legend: PID.
+        Diameter-resolved grid-convergence data. Each figure corresponds to one bin set and one droplet diameter. Legend: Participant ID.
       </p>
       {html}
     </section>
@@ -654,7 +684,10 @@ def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: di
 
             for _, row in zone.data.iterrows():
                 value = row[y_column]
-                if value == -999.0:
+                try:
+                    if float(value) <= -998.0:
+                        continue
+                except (TypeError, ValueError):
                     continue
                 level_number = None
                 if grid_column is not None:
@@ -712,7 +745,10 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                     continue
 
                 y_value = row[y_column]
-                if y_value == -999.0:
+                try:
+                    if float(y_value) <= -998.0:
+                        continue
+                except (TypeError, ValueError):
                     continue
 
                 trace_rows.append({
@@ -800,7 +836,7 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
-        Combined icing data from required sheets plotted against 1 / number of bins. Each figure corresponds to one grid level. Missing values equal to -999 are ignored. Legend: PID.
+        Combined icing data from required sheets plotted against 1 / number of bins. Each figure corresponds to one grid level. Missing values equal to -999 are ignored. Legend: Participant ID.
       </p>
       {figures_html}
     </section>
@@ -843,7 +879,7 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
-        Grid-convergence data grouped by roughness condition. Missing values equal to -999 are ignored. Legend: PID.
+        Grid-convergence data grouped by roughness condition. Missing values equal to -999 are ignored. Legend: Participant ID.
       </p>
       {figures_html}
     </section>
