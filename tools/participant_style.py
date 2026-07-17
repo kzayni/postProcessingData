@@ -2,10 +2,28 @@
 
 PARTICIPANTS = [
     {
+        "Participant ID": "001",
+        "Organization": "CIRA",
+        "Solver(s)": "SIMBA",
+        "Name(s)": "Franscesco Capizzano",
+    },
+    {
+        "Participant ID": "002",
+        "Organization": "AEROTEX",
+        "Solver(s)": "IHB3D",
+        "Name(s)": "Ariane Vieira",
+    },
+    {
         "Participant ID": "004",
         "Organization": "ONERA",
         "Solver(s)": "CEDRE / IGLOO3D",
         "Name(s)": "Adèle Veilleux",
+    },
+    {
+        "Participant ID": "006",
+        "Organization": "DASSAULT AVIATION",
+        "Solver(s)": "AETHER",
+        "Name(s)": "François Caminade, Gianiel Zach",
     },
     {
         "Participant ID": "007",
@@ -19,12 +37,36 @@ PARTICIPANTS = [
         "Solver(s)": "STAR-CCM+",
         "Name(s)": "Jeewong Kim",
     },
+    {
+        "Participant ID": "014",
+        "Organization": "Airbus",
+        "Solver(s)": "CODA IGLOO3D",
+        "Name(s)": "Alberto Della Noce",
+    },
+    {
+        "Participant ID": "019",
+        "Organization": "Synopsys",
+        "Solver(s)": "FLUENT ICING",
+        "Name(s)": "Isik Ozcer",
+    },
+    {
+        "Participant ID": "020",
+        "Organization": "Bombardier",
+        "Solver(s)": "Dragon-Ice",
+        "Name(s)": "Guy Fortin",
+    },
 ]
 
 PARTICIPANT_COLORS = {
+    "001": "#00FF40",
+    "002": "#00BDDB",
     "004": "#4d7502",
+    "006": "#4f0077",
     "007": "#1f77b4",
     "009": "#ad1d03",
+    "014": "#aa00ff",
+    "019": "#e39000",
+    "020": "#573700",
 }
 
 PREVIEW_PARTICIPANT_NAME = "All participants"
@@ -39,6 +81,16 @@ def normalize_participant_id(participant_id: str | int) -> str:
 
 def participant_color(participant_id: str) -> str:
     return PARTICIPANT_COLORS.get(normalize_participant_id(participant_id), "black")
+
+
+def participant_legend_rank(participant_id: str | int) -> int:
+    """Return the canonical participant-table order for Plotly legends."""
+    normalized_id = normalize_participant_id(participant_id)
+    ordered_ids = [normalize_participant_id(item["Participant ID"]) for item in PARTICIPANTS]
+    try:
+        return ordered_ids.index(normalized_id)
+    except ValueError:
+        return len(ordered_ids)
 
 
 def participant_info(participant_id: str | int) -> dict[str, str] | None:

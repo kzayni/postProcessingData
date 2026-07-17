@@ -1,0 +1,60 @@
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#   IPW-3 Final Ice Shape DATA SUBMITTAL FORM for Test Case NACA0012_AE3933, May 18th 2026
+#
+#       NOMENCLATURE:
+#             X_ICED [m]:  X-coordinate of the iced surface
+#             Y_ICED [m]:  Y-coordinate of the iced surface
+#             Z_ICED [m]:  Z-coordinate of the iced surface
+#
+#                XXmm:  Roughness height used for the case, in mm.
+#                       In the zone name, use the format KS_XXmm.
+#                       For example, if k_s = 1.5 mm, use KS_1p5mm. 
+#                       For Variable roughness, use KS_VAR
+#
+#    FLOW CONDITIONS:
+#                                   AOA: 4.0 deg
+#                           Mach Number: 0.3127 [-]
+#       Mean aerodynamic chord (M.A.C.): 0.5334 [m]
+#                       Reynolds Number: 3.8947 million (based on MAC)
+#                       Freestream Temp: 270.95 [K]
+#                        Reference area: 0.97548 [m2]
+#               Moment Reference Center: 0.13335, 0, 0 [m] (X, Y, Z)
+#
+#    ICING CONDITIONS:
+#                           Icing Time: 420 [s]
+#                                  LWC: 0.55 [g/m3]
+#                                  MVD: 20 [μm]
+#
+#              NOTES: 1. Please use at least 5 decimal places in the numerical values
+#                     2. If data are NOT provided, please fill data fields with a numerical value of "-999" 
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+AUXDATA NUM_LAYERS  = "insert the number of total ice layers"
+                                              
+VARIABLES = "X_ICED" "Y_ICED" "Z_ICED"
+
+ZONE T="SLICE_Y_0p9144_BINS01_KS_XXmm_SINGLE_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS03_KS_XXmm_SINGLE_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS07_KS_XXmm_SINGLE_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS15_KS_XXmm_SINGLE_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS01_KS_XXmm_FINAL_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS03_KS_XXmm_FINAL_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS07_KS_XXmm_FINAL_LAYER"
+-999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS15_KS_XXmm_FINAL_LAYER"
+-999 -999 -999

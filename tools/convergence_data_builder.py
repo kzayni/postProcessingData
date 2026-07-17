@@ -8,9 +8,10 @@ import re
 
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
 
 from .gatherParticipantData import iter_case_data
-from .participant_style import participant_color
+from .participant_style import participant_color, participant_legend_rank
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
     {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
@@ -224,6 +225,8 @@ def plotly_config(filename: str) -> dict[str, Any]:
 
 
 DEFER_PLOTLY_DIR: Path | None = None
+PNG_EXPORT_DIR: Path | None = None
+PNG_EXPORT_QUEUE: list[tuple[go.Figure, Path]] = []
 
 
 def set_defer_plotly_html(output_dir: Path | None) -> None:
@@ -231,7 +234,28 @@ def set_defer_plotly_html(output_dir: Path | None) -> None:
     DEFER_PLOTLY_DIR = output_dir
 
 
+def set_png_export_dir(output_dir: Path | None) -> None:
+    global PNG_EXPORT_DIR
+    PNG_EXPORT_DIR = output_dir
+
+
+def clear_png_export_queue() -> None:
+    PNG_EXPORT_QUEUE.clear()
+
+
+def flush_png_exports(scale: int = 3) -> None:
+    if not PNG_EXPORT_QUEUE:
+        return
+    figures, paths = zip(*PNG_EXPORT_QUEUE)
+    pio.write_images(list(figures), list(paths), width=1200, height=900, scale=scale)
+    PNG_EXPORT_QUEUE.clear()
+
+
 def figure_to_html_div(fig: go.Figure, filename: str) -> str:
+    if PNG_EXPORT_DIR is not None:
+        PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        PNG_EXPORT_QUEUE.append((fig, PNG_EXPORT_DIR / f"{filename}.png"))
+        return ""
     figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
     if DEFER_PLOTLY_DIR is not None:
         DEFER_PLOTLY_DIR.mkdir(parents=True, exist_ok=True)
@@ -307,8 +331,8 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             zone_is_diameter = "by_diameter" in zone_name.lower()
+            roughness_key = extract_roughness_key_from_zone_name(zone_name)
             if roughness_filter is not None:
-                roughness_key = extract_roughness_key_from_zone_name(zone_name)
                 if roughness_key != roughness_filter:
                     continue
             if is_diameter_plot != zone_is_diameter:
@@ -348,7 +372,8 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                     if bin_set_column is not None:
                         bin_values = sorted(set(str(value) for value in diameter_data[bin_set_column]))
                         bin_set = f" {'/'.join(bin_values)}"
-                    trace_name = f"{label}{bin_set} D={diameter:g} um"
+                    roughness_suffix = f" | {format_roughness_title(roughness_key)}" if roughness_key else ""
+                    trace_name = f"{label}{bin_set} D={diameter:g} um{roughness_suffix}"
                     trace_key = (
                         participant.participant_id,
                         case_id,
@@ -369,8 +394,9 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                             mode="lines+markers",
                             name=trace_name,
                             legendgroup=trace_name,
+                            legendrank=participant_legend_rank(participant.participant_id),
                             line=dict(color=color),
-                            marker=dict(color=color),
+                            marker=dict(color=color, size=9),
                             customdata=diameter_data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                             hovertemplate=(
                                 f"Participant: {escape(label)}<br>"
@@ -406,10 +432,11 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                     x=data[GRID_SPACING_COLUMN],
                     y=data[y_column],
                     mode="lines+markers",
-                    name=label,
-                    legendgroup=label,
+                    name=f"{label} | {format_roughness_title(roughness_key)}" if roughness_key else label,
+                    legendgroup=f"{label}_{roughness_key or 'unspecified'}",
+                    legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
-                    marker=dict(color=color),
+                    marker=dict(color=color, size=9),
                     customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -568,8 +595,9 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
                     mode="lines+markers",
                     name=label,
                     legendgroup=label,
+                    legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
-                    marker=dict(color=color),
+                    marker=dict(color=color, size=9),
                     customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -656,7 +684,16 @@ def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, 
                 roughness_keys.add(roughness_key)
 
     preferred_order = ["smooth", "0.5mm", "1mm", "1.5mm", "variable_roughness"]
-    return [key for key in preferred_order if key in roughness_keys]
+    ordered_keys = [key for key in preferred_order if key in roughness_keys]
+
+    # Participants may submit valid fixed roughness heights that are not part of
+    # the template's preferred set (for example, 1.0668 mm). Keep those keys so
+    # their CFD coefficients are not silently omitted from the plots.
+    additional_keys = sorted(
+        roughness_keys.difference(preferred_order),
+        key=roughness_sort_key,
+    )
+    return ordered_keys + additional_keys
 
 def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
     grid_levels: set[str] = set()
@@ -777,8 +814,9 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                 mode="lines+markers",
                 name=label,
                 legendgroup=label,
+                legendrank=participant_legend_rank(participant.participant_id),
                 line=dict(color=color),
-                marker=dict(color=color),
+                marker=dict(color=color, size=9),
                 customdata=customdata,
                 hovertemplate=(
                     f"Participant: {escape(label)}<br>"
@@ -854,6 +892,38 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
         """
 
     figures_html = ""
+
+    if "NACA0012" in case_id.upper():
+        combined_fig = None
+        combined_trace_count = 0
+        for roughness_key in roughness_keys:
+            roughness_fig, trace_count, _ = build_grid_convergence_figure(
+                participants, case_id, plot_spec, roughness_filter=roughness_key
+            )
+            combined_trace_count += trace_count
+            if combined_fig is None:
+                combined_fig = go.Figure(roughness_fig)
+            else:
+                combined_fig.add_traces(list(roughness_fig.data))
+
+        title = "All roughness heights"
+        if combined_trace_count == 0 or combined_fig is None:
+            figure_html = empty_placeholder(title=title, message="No matching values were found.")
+        else:
+            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_all_roughness"
+            figure_html = figure_to_html_div(combined_fig, filename=filename)
+        return f"""
+        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
+          <h4>{escape(plot_spec["title"])}</h4>
+          <p class="plot-description">
+            Grid-convergence data with all NACA0012 roughness heights overlaid. Missing values equal to -999 are ignored. Legend: Participant ID.
+          </p>
+          <section class="slice-plot-group">
+            <h5>{escape(title)}</h5>
+            <div class="plot-container">{figure_html}</div>
+          </section>
+        </section>
+        """
 
     for roughness_key in roughness_keys:
         fig, trace_count, skipped_notes = build_grid_convergence_figure(participants, case_id, plot_spec, roughness_filter=roughness_key)

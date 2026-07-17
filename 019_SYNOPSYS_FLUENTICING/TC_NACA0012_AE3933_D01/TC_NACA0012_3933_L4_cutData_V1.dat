@@ -1,0 +1,55 @@
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#   IPW-3 Cut/Slice DATA SUBMITTAL FORM for Test Case NACA0012_AE3933, May 18th 2026
+#
+#       NOMENCLATURE:
+#                  X [m]:  X-coordinate of the surface (clean for reference)
+#                  Y [m]:  Y-coordinate of the surface (clean for reference)
+#                  Z [m]:  Z-coordinate of the surface (clean for reference)
+#                 Cp [-]:  Pressure coefficient
+#            HTC [W/m2K]:  Convective Heat Transfer Coefficient (on the rough surface)
+#               Beta [-]:  Collection efficiency
+#                 Ts [K]:  Surface temperature
+#                 FF [-]:  Freezing fraction
+#                  k [m]:  Surface roughness height if variable (OPTIONAL)
+#         RhoIce [kg/m3]:  Ice density (OPTIONAL)
+#      HTC_CLEAN [W/m2K]:  Convective Heat Transfer Coefficient on the surface without roughness (OPTIONAL)
+#
+#                XXmm:  Roughness height used for the case, in mm.
+#                       In the zone name, use the format KS_XXmm.
+#                       For example, if k_s = 1.5 mm, use KS_1p5mm. 
+#                       For Variable roughness, use KS_VAR
+#
+#    FLOW CONDITIONS:
+#                                   AOA: 4.0 deg
+#                           Mach Number: 0.3127 [-]
+#       Mean aerodynamic chord (M.A.C.): 0.5334 [m]
+#                       Reynolds Number: 3.8947 million (based on MAC)
+#                       Freestream Temp: 270.95 [K]
+#                        Reference area: 0.97548 [m2]
+#               Moment Reference Center: 0.13335, 0, 0 [m] (X, Y, Z)
+#
+#    ICING CONDITIONS:
+#                           Icing Time: 420 [s]
+#                                  LWC: 0.55 [g/m3]
+#                                  MVD: 20 [μm]
+#
+#              NOTES: 1. Please use at least 5 decimal places in the numerical values
+#                     2. If data are NOT provided, please fill data fields with a numerical value of "-999" 
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+                                                    <- Optional ->                 
+VARIABLES = "X" "Y" "Z" "Cp" "HTC" "Beta" "Ts" "FF" "k" "RhoIce" "HTC_CLEAN"
+
+ZONE T="SLICE_Y_0p9144_BINS01_KS_XXmm_CUTDATA"
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS03_KS_XXmm_CUTDATA"
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS07_KS_XXmm_CUTDATA"
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999
+
+ZONE T="SLICE_Y_0p9144_BINS15_KS_XXmm_CUTDATA"
+-999 -999 -999 -999 -999 -999 -999 -999 -999 -999 -999

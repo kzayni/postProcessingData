@@ -431,6 +431,9 @@ def try_parse_numeric_row(line: str) -> Optional[list[float]]:
     return values
 
 
+OPTIONAL_TRAILING_TECPLOT_VARIABLES = {"k", "rhoice", "htc_clean"}
+
+
 def read_tecplot_dat(path: Path, case_id: str | None = None, highlight_points_by_case: HighlightPointsByCase | None = None, clean_s_cache: bool = False, process_cutdata: bool = True) -> TecplotData:
     """
     Read a Tecplot ASCII .dat file.
@@ -463,6 +466,15 @@ def read_tecplot_dat(path: Path, case_id: str | None = None, highlight_points_by
         for row in current_zone_rows:
             if len(row) == n_variables:
                 valid_rows.append(row)
+            elif len(row) < n_variables and all(
+                variable.strip().lower() in OPTIONAL_TRAILING_TECPLOT_VARIABLES
+                for variable in result.variables[len(row):]
+            ):
+                # Some submissions omit unused optional columns at the end of
+                # each row instead of filling them with -999 as the template
+                # requests. Preserve the supplied values and pad only those
+                # known trailing optional fields.
+                valid_rows.append(row + [-999.0] * (n_variables - len(row)))
             else:
                 print(f"Warning: skipped row in {path.name}, zone {current_zone_name}: expected {n_variables} values, got {len(row)}")
 
@@ -808,7 +820,13 @@ def read_xlsx_sheets(path: Path) -> dict[str, list[list[str]]]:
             sheet_name = sheet.attrib["name"]
             rel_id = sheet.attrib[f"{{{XLSX_NS['r']}}}id"]
             target = rel_targets[rel_id]
-            sheet_path = "xl/" + target.lstrip("/")
+            # Relationship targets are normally relative to xl/workbook.xml
+            # (for example, "worksheets/sheet1.xml"). Some spreadsheet
+            # writers instead store package-root paths such as
+            # "xl/worksheets/sheet1.xml". Accept both forms without producing
+            # an invalid duplicated "xl/xl/..." path.
+            target_path = target.lstrip("/")
+            sheet_path = target_path if target_path in archive.namelist() else "xl/" + target_path
             sheet_root = ET.fromstring(archive.read(sheet_path))
             rows: list[list[str]] = []
 

@@ -8,9 +8,10 @@ import re
 
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
-from .participant_style import participant_color
+from .participant_style import participant_color, participant_legend_rank
 
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
@@ -254,6 +255,8 @@ def plotly_config(filename: str) -> dict[str, Any]:
 
 
 DEFER_PLOTLY_DIR: Path | None = None
+PNG_EXPORT_DIR: Path | None = None
+PNG_EXPORT_QUEUE: list[tuple[go.Figure, Path]] = []
 
 
 def set_defer_plotly_html(output_dir: Path | None) -> None:
@@ -261,7 +264,28 @@ def set_defer_plotly_html(output_dir: Path | None) -> None:
     DEFER_PLOTLY_DIR = output_dir
 
 
+def set_png_export_dir(output_dir: Path | None) -> None:
+    global PNG_EXPORT_DIR
+    PNG_EXPORT_DIR = output_dir
+
+
+def clear_png_export_queue() -> None:
+    PNG_EXPORT_QUEUE.clear()
+
+
+def flush_png_exports(scale: int = 3) -> None:
+    if not PNG_EXPORT_QUEUE:
+        return
+    figures, paths = zip(*PNG_EXPORT_QUEUE)
+    pio.write_images(list(figures), list(paths), width=1200, height=900, scale=scale)
+    PNG_EXPORT_QUEUE.clear()
+
+
 def figure_to_html_div(fig: go.Figure, filename: str) -> str:
+    if PNG_EXPORT_DIR is not None:
+        PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        PNG_EXPORT_QUEUE.append((fig, PNG_EXPORT_DIR / f"{filename}.png"))
+        return ""
     figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
     if DEFER_PLOTLY_DIR is not None:
         DEFER_PLOTLY_DIR.mkdir(parents=True, exist_ok=True)
@@ -492,6 +516,8 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
             trace_name = participant_label(participant, dataset_data, grid_data)
+            if "NACA0012" in case_id.upper():
+                trace_name = f"{trace_name} | {format_roughness_title(roughness_key)}"
             slice_text = "unknown"
             if zone_info is not None:
                 slice_value = decode_slice_position(zone_info["slice"])
@@ -530,6 +556,7 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                     mode="lines",
                     name=trace_name,
                     legendgroup=trace_name,
+                    legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
                     hovertemplate=(
                         f"Participant: {escape(trace_name)}<br>"
@@ -687,6 +714,48 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
         if not roughness_keys:
             roughness_keys = [None]
 
+        if "NACA0012" in case_id.upper():
+            combined_fig = None
+            combined_trace_count = 0
+            combined_skipped_notes: list[str] = []
+            for roughness_key in roughness_keys:
+                roughness_fig, roughness_trace_count, _, skipped_notes = build_cutdata_figure(
+                    participants,
+                    case_id,
+                    grid_level,
+                    plot_spec,
+                    slice_filter=slice_position,
+                    roughness_filter=roughness_key,
+                )
+                combined_skipped_notes.extend(skipped_notes)
+                combined_trace_count += roughness_trace_count
+                if combined_fig is None:
+                    combined_fig = go.Figure(roughness_fig)
+                else:
+                    combined_fig.add_traces(list(roughness_fig.data))
+
+            all_skipped_notes.extend(combined_skipped_notes)
+            slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
+            full_title = f"{slice_title} | All roughness heights"
+            if combined_trace_count == 0 or combined_fig is None:
+                figure_html = empty_placeholder(
+                    title=f"{plot_spec['title']} | {full_title}",
+                    message="No matching cutData variables were found yet for this case/grid level and slice.",
+                )
+            else:
+                slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
+                filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}_all_roughness"
+                figure_html = figure_to_html_div(combined_fig, filename=filename)
+            figures_html += f"""
+            <section class="slice-plot-group">
+              <h5>{escape(full_title)}</h5>
+              <div class="plot-container">
+                {figure_html}
+              </div>
+            </section>
+            """
+            continue
+
         for roughness_key in roughness_keys:
             fig, trace_count, figure_slice_positions, skipped_notes = build_cutdata_figure(
                 participants,
@@ -725,6 +794,17 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
 
     roughness_summary = collect_cutdata_participant_roughness_summary(participants, case_id, grid_level, plot_spec)
     description = build_plot_description(plot_spec, [value for value in slice_positions if value is not None], case_id, roughness_summary=roughness_summary)
+
+    # A participant can have an invalid placeholder zone for one roughness/bin
+    # and still contribute a valid trace from another zone. Once roughness
+    # plots are combined, do not show a contradictory "did not provide"
+    # warning for participants that are actually represented in the figure.
+    contributing_participant_ids = set(roughness_summary)
+    all_skipped_notes = [
+        note
+        for note in all_skipped_notes
+        if not any(f"Participant ID {participant_id} " in note for participant_id in contributing_participant_ids)
+    ]
 
     notes_html = ""
     if all_skipped_notes:

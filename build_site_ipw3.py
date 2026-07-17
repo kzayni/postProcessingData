@@ -61,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const id = `variable-filter-${scopeIndex}-${index}`;
         return `
           <label class="variable-filter-option" for="${id}">
-            <input id="${id}" type="checkbox" value="${key}" />
+            <input id="${id}" type="checkbox" value="${key}" checked />
             <span>${label}</span>
           </label>
         `;
@@ -132,18 +132,22 @@ document.addEventListener("DOMContentLoaded", () => {
       const id = `ice-slice-filter-${scopeIndex}-${index}`;
       return `
         <label class="variable-filter-option" for="${id}">
-          <input id="${id}" type="checkbox" value="${key}" data-ice-slice-toggle />
+          <input id="${id}" type="checkbox" value="${key}" data-ice-slice-toggle checked />
           <span>${label}</span>
         </label>
       `;
     }).join("");
+
+    const onlyCombinedRoughness = Array.from(roughnessBySlice.values()).every((options) =>
+      options.size === 1 && options.has("all_roughness")
+    );
 
     const roughnessHtml = Array.from(slices.entries()).map(([sliceKey, sliceLabel], sliceIndex) => {
       const options = Array.from(roughnessBySlice.get(sliceKey).entries()).map(([roughnessKey, roughnessLabel], roughnessIndex) => {
         const id = `ice-roughness-filter-${scopeIndex}-${sliceIndex}-${roughnessIndex}`;
         return `
           <label class="variable-filter-option" for="${id}">
-            <input id="${id}" type="checkbox" value="${roughnessKey}" data-ice-roughness-toggle data-slice-key="${sliceKey}" />
+            <input id="${id}" type="checkbox" value="${roughnessKey}" data-ice-roughness-toggle data-slice-key="${sliceKey}" checked />
             <span>${roughnessLabel}</span>
           </label>
         `;
@@ -168,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <button type="button" data-slice-action="none">None</button>
       </div>
       <div class="variable-filter-options">${sliceCheckboxHtml}</div>
-      <div class="ice-roughness-filter-list">${roughnessHtml}</div>
+      <div class="ice-roughness-filter-list" ${onlyCombinedRoughness ? "hidden" : ""}>${roughnessHtml}</div>
     `;
 
     const updateIceFilters = () => {
@@ -568,6 +572,17 @@ def output_dir_for_participant(participant_id: str | None) -> Path:
     return ROOT_DIR / f"PREVIEW_{suffix}"
 
 
+def png_output_dir_for_participant(participant_id: str | None) -> Path:
+    if participant_id is None:
+        return ROOT_DIR / "PREVIEW_PNG"
+
+    normalized_id = normalize_participant_id(participant_id)
+    info = participant_info(normalized_id)
+    organization = info.get("Organization", "") if info is not None else ""
+    suffix = preview_folder_slug(organization or normalized_id)
+    return ROOT_DIR / f"PREVIEW_PNG_{suffix}"
+
+
 def configure_output_paths(participant_id: str | None) -> None:
     global OUTPUT_DIR, OUTPUT_HTML, PAGES_DIR
 
@@ -836,7 +851,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clean", action="store_true", help="Recompute cutData s mapping files instead of reusing existing *_sMap.dat files.")
     parser.add_argument("--p", "--participant", dest="participant_id", help="Build a preview containing only one participant ID, for example --p 004.")
     parser.add_argument("--slides", action="store_true", help="Build index.html as a one-plot-per-slide presentation with sidebar and previous/next controls.")
+    parser.add_argument("--png", action="store_true", help="Export every generated plot as a PNG instead of building HTML pages.")
+    parser.add_argument("--lower-res", action="store_true", help="Export PNGs at 1200x900 instead of the default 3600x2700. Used with --png.")
     return parser.parse_args()
+
+
+def write_png_plots(participants, case_ids: list[str], output_dir: Path, lower_res: bool = False) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cutdata_builder.clear_png_export_queue()
+    iceshape_builder.clear_png_export_queue()
+    convergence_data_builder.clear_png_export_queue()
+
+    for case_id in case_ids:
+        case_output_dir = output_dir / case_id
+        cutdata_builder.set_png_export_dir(case_output_dir)
+        iceshape_builder.set_png_export_dir(case_output_dir)
+        convergence_data_builder.set_png_export_dir(case_output_dir)
+        build_convergence_page_content(participants, case_id)
+        for grid_level in sorted(VALID_GRID_LEVELS):
+            build_grid_page_content(participants, case_id, grid_level)
+
+    scale = 1 if lower_res else 3
+    convergence_data_builder.flush_png_exports(scale=scale)
+    cutdata_builder.flush_png_exports(scale=scale)
+    iceshape_builder.flush_png_exports(scale=scale)
 
 
 def write_case_pages(participants, case_ids: list[str]) -> None:
@@ -893,6 +931,16 @@ def main() -> None:
 
     case_ids = get_case_ids(participants)
     preview_name = preview_participant_name(args.participant_id) if args.participant_id is not None else PREVIEW_PARTICIPANT_NAME
+
+    if args.png:
+        png_output_dir = png_output_dir_for_participant(args.participant_id)
+        write_png_plots(participants, case_ids, png_output_dir, lower_res=args.lower_res)
+        png_count = sum(1 for _ in png_output_dir.rglob("*.png"))
+        print(f"Wrote {png_count} PNG plots in {png_output_dir}")
+        print(f"Participants found: {len(participants)}")
+        print(f"Preview participant: {preview_name}")
+        print(f"Cases included: {', '.join(case_ids)}")
+        return
 
     participants_table_html = build_participants_table(PARTICIPANTS, participant_id=args.participant_id)
     case_index_html = build_case_index_section(case_ids)

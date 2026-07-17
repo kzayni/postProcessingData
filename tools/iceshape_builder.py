@@ -10,9 +10,10 @@ import re
 
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
-from .participant_style import participant_color
+from .participant_style import normalize_participant_id, participant_color, participant_legend_rank
 
 
 # Central place to tune ice-shape figure axes.
@@ -114,10 +115,25 @@ def find_submitted_ice_xz_columns(columns) -> tuple[str | None, str | None]:
 
 
 def valid_submitted_ice_shape_rows(dataframe: pd.DataFrame, x_column: str, z_column: str) -> pd.DataFrame:
-    """Drop placeholder rows before plotting submitted ice-shape coordinates."""
+    """Drop placeholder rows before plotting submitted ice-shape coordinates.
+
+    Some final-layer exports use repeated ``0 0 0`` rows as separators before
+    the real contour.  Plotly otherwise joins that artificial origin to the
+    trailing edge and draws a long horizontal line through the airfoil.
+    """
     x_values = pd.to_numeric(dataframe[x_column], errors="coerce")
     z_values = pd.to_numeric(dataframe[z_column], errors="coerce")
     valid_mask = x_values.notna() & z_values.notna() & (x_values > -998.0) & (z_values > -998.0)
+
+    y_column = find_column_case_insensitive(
+        dataframe.columns,
+        ["Y_ICED", "Y_iced", "CoordinateY_Iced", "CoordinateY_iced", "Y", "CoordinateY"],
+    )
+    if y_column is not None:
+        y_values = pd.to_numeric(dataframe[y_column], errors="coerce")
+        all_zero_placeholder = (x_values.abs() < 1.0e-14) & (y_values.abs() < 1.0e-14) & (z_values.abs() < 1.0e-14)
+        valid_mask &= ~all_zero_placeholder
+
     return dataframe.loc[valid_mask]
 
 
@@ -217,6 +233,8 @@ def plotly_config(filename: str) -> dict[str, Any]:
 
 
 DEFER_PLOTLY_DIR: Path | None = None
+PNG_EXPORT_DIR: Path | None = None
+PNG_EXPORT_QUEUE: list[tuple[go.Figure, Path]] = []
 
 
 def set_defer_plotly_html(output_dir: Path | None) -> None:
@@ -224,7 +242,28 @@ def set_defer_plotly_html(output_dir: Path | None) -> None:
     DEFER_PLOTLY_DIR = output_dir
 
 
+def set_png_export_dir(output_dir: Path | None) -> None:
+    global PNG_EXPORT_DIR
+    PNG_EXPORT_DIR = output_dir
+
+
+def clear_png_export_queue() -> None:
+    PNG_EXPORT_QUEUE.clear()
+
+
+def flush_png_exports(scale: int = 3) -> None:
+    if not PNG_EXPORT_QUEUE:
+        return
+    figures, paths = zip(*PNG_EXPORT_QUEUE)
+    pio.write_images(list(figures), list(paths), width=1200, height=900, scale=scale)
+    PNG_EXPORT_QUEUE.clear()
+
+
 def figure_to_html_div(fig: go.Figure, filename: str) -> str:
+    if PNG_EXPORT_DIR is not None:
+        PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        PNG_EXPORT_QUEUE.append((fig, PNG_EXPORT_DIR / f"{filename}.png"))
+        return ""
     figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
     if DEFER_PLOTLY_DIR is not None:
         DEFER_PLOTLY_DIR.mkdir(parents=True, exist_ok=True)
@@ -428,10 +467,21 @@ def collect_ice_shape_participant_roughness_summary(participants, case_id: str, 
     return summary
 
 
-def clean_reference_path_for_case(case_id: str) -> Path | None:
+def use_rotated_naca0012_reference(participants) -> bool:
+    """Use CIRA's post-processing geometry only for a participant-001 build."""
+    participant_ids = {
+        normalize_participant_id(participant.participant_id)
+        for participant in participants
+    }
+    return participant_ids == {"001"}
+
+
+def clean_reference_path_for_case(case_id: str, participants=None) -> Path | None:
     if "ONERAM6" in case_id.upper():
         return Path("R00_REFERENCE") / "ONERAM6_CLEAN.dat"
     if "NACA0012" in case_id.upper():
+        if participants is not None and use_rotated_naca0012_reference(participants):
+            return Path("R00_REFERENCE") / "NACA0012_CLEAN_ROTATED.dat"
         return Path("R00_REFERENCE") / "NACA0012_CLEAN.dat"
     return None
 
@@ -502,8 +552,8 @@ def ordered_clean_reference_columns(case_id: str, zone, x_column: str, z_column:
     return ordered[x_column], ordered[z_column]
 
 
-def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float | None = None) -> tuple[int, list[float]]:
-    reference_path = clean_reference_path_for_case(case_id)
+def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float | None = None, participants=None) -> tuple[int, list[float]]:
+    reference_path = clean_reference_path_for_case(case_id, participants=participants)
     if reference_path is None or not reference_path.exists():
         return 0, []
 
@@ -568,7 +618,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
     """
 
     fig = go.Figure()
-    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter)
+    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter, participants=participants)
     trace_count = 0
     slice_positions: list[float] = list(reference_slice_positions)
 
@@ -625,14 +675,17 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 continue
 
             trace_name = label
+            if "NACA0012" in case_id.upper() and roughness_filter is None:
+                trace_name = f"{label} | {format_roughness_title(roughness_key)}"
 
             fig.add_trace(
                 go.Scatter(
                     x=plot_data[x_iced_column],
                     y=plot_data[z_iced_column],
                     mode="lines",
-                    name=trace_name,
-                    legendgroup=label,
+                name=trace_name,
+                legendgroup=label,
+                legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -668,7 +721,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
 
 def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
     fig = go.Figure()
-    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter)
+    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter, participants=participants)
     trace_count = 0
     slice_positions: list[float] = list(reference_slice_positions)
 
@@ -708,7 +761,7 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 slice_text = "unknown"
                 slice_position = None
 
-            if shape_role == "SINGLE_LAYER":
+            if shape_role != "FINAL_LAYER":
                 continue
             if bins_filter is not None and bins_id != bins_filter:
                 continue
@@ -729,7 +782,9 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
                 continue
 
             trace_name = label if layer_id.startswith("zone ") else f"{label} {layer_id}"
-            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode="lines", name=trace_name, legendgroup=label, line=dict(color=color), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
+            if "NACA0012" in case_id.upper() and roughness_filter is None:
+                trace_name = f"{trace_name} | {format_roughness_title(roughness_key)}"
+            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode="lines", name=trace_name, legendgroup=label, legendrank=participant_legend_rank(participant.participant_id), line=dict(color=color), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
             trace_count += 1
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
@@ -749,7 +804,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
 
     This section contains:
         1. SINGLE_LAYER zones from finalIceShape / iceShape.
-        2. FINAL_LAYER or legacy final zones from finalIceShape / iceShape.
+        2. FINAL_LAYER zones from finalIceShape / iceShape.
     """
 
     single_figures_html = ""
@@ -761,6 +816,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     configured_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level)
     if not configured_roughness:
         configured_roughness = [None]
+    combine_roughness = "NACA0012" in case_id.upper()
 
     for slice_position in configured_slices:
         slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
@@ -768,17 +824,23 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
 
         for bins_id in configured_bins:
             bins_slug = f"_{bins_id.lower()}"
-            figure_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
-            if not figure_roughness:
+            if combine_roughness:
+                # NACA0012 participants commonly supplied more than one valid
+                # roughness height. Overlay them in one comparison instead of
+                # hiding each height behind a separate filter/card.
                 figure_roughness = [None]
+            else:
+                figure_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
+                if not figure_roughness:
+                    figure_roughness = [None]
 
             for roughness_key in figure_roughness:
                 roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
-                roughness_title = format_roughness_title(roughness_key)
+                roughness_title = "All roughness heights" if combine_roughness else format_roughness_title(roughness_key)
                 bin_title = f"{slice_title} | {bins_id} | {roughness_title}"
                 slice_key = slugify(slice_title)
                 roughness_key_text = roughness_key or "unspecified"
-                roughness_filter_key = slugify(roughness_key_text)
+                roughness_filter_key = "all_roughness" if combine_roughness else slugify(roughness_key_text)
                 roughness_filter_label = roughness_title
 
                 single_fig, single_trace_count, single_slice_positions = build_single_layer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id, roughness_filter=roughness_key)
@@ -834,8 +896,8 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     )
 
     multi_description = (
-        "Multi-layer final ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain FINAL_LAYER. "
-        "Legacy zones without SINGLE_LAYER or FINAL_LAYER are kept in this final-layer plot. "
+        "Final ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain FINAL_LAYER. "
+        "Intermediate layer zones such as 1st_LAYER and 2nd_LAYER are ignored. "
         "The clean reference shape is drawn from R00_REFERENCE. "
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
