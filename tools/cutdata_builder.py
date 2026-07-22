@@ -44,6 +44,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "y_label": "Convective Heat Transfer [W/m2K]",
         "filename_slug": "htc_vs_s",
         "bins_filter": None,
+        "y_range": [0, 1600],
     },
     {
         "plot_key": "beta_bins01_vs_s",
@@ -114,7 +115,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     {
         "plot_key": "freezing_fraction_vs_s",
         "title": "Freezing fraction vs s",
-        "description": "Freezing fraction along the selected surface cut(s).",
+        "description": "Freezing fraction along the selected surface cut(s). Values below 1e-9 are shown as -1.0, following the adopted missing/negligible-value convention.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["FF", "FreezingFraction"],
         "x_label": "Surface distance from highlight [m]",
@@ -277,14 +278,19 @@ def flush_png_exports(scale: int = 3) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=1200, height=900, scale=scale)
+    pio.write_images(list(figures), list(paths), width=1350, height=900, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
-def figure_to_html_div(fig: go.Figure, filename: str) -> str:
+def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
     if PNG_EXPORT_DIR is not None:
         PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-        PNG_EXPORT_QUEUE.append((fig, PNG_EXPORT_DIR / f"{filename}.png"))
+        png_fig = go.Figure(fig)
+        png_fig.update_layout(
+            title=dict(text=plot_title, x=0.5, xanchor="center"),
+            margin=dict(t=100),
+        )
+        PNG_EXPORT_QUEUE.append((png_fig, PNG_EXPORT_DIR / f"{filename}.png"))
         return ""
     figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
     if DEFER_PLOTLY_DIR is not None:
@@ -338,7 +344,7 @@ def format_slice_positions(slice_values: list[float]) -> str:
     return ", ".join(f"Y = {value:g} m" for value in unique_values)
 
 
-def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 560, legend_right: bool = True, reverse_y_axis: bool = False) -> go.Figure:
+def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 560, legend_right: bool = True, reverse_y_axis: bool = False, y_range: list[float] | None = None) -> go.Figure:
     if legend_right:
         legend = dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top")
         margin = dict(l=90, r=220, t=30, b=80)
@@ -347,7 +353,9 @@ def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 56
         margin = dict(l=90, r=40, t=70, b=80)
 
     yaxis = dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False)
-    if reverse_y_axis:
+    if y_range is not None:
+        yaxis["range"] = y_range
+    elif reverse_y_axis:
         yaxis["autorange"] = "reversed"
 
     fig.update_layout(
@@ -515,6 +523,8 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
             if data.empty:
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
+            if plot_spec["plot_key"] == "freezing_fraction_vs_s":
+                data.loc[data[y_column] < 1e-9, y_column] = -1.0
             trace_name = participant_label(participant, dataset_data, grid_data)
             if "NACA0012" in case_id.upper():
                 trace_name = f"{trace_name} | {format_roughness_title(roughness_key)}"
@@ -574,7 +584,13 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
             trace_count += 1
 
     trace_count += add_reference_traces(fig, case_id, grid_level, plot_spec["plot_key"])
-    style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"], reverse_y_axis=plot_spec.get("reverse_y_axis", False))
+    style_xy_figure(
+        fig,
+        plot_spec["x_label"],
+        plot_spec["y_label"],
+        reverse_y_axis=plot_spec.get("reverse_y_axis", False),
+        y_range=plot_spec.get("y_range"),
+    )
     skipped_notes = sorted(skipped_note_set)
     return fig, trace_count, slice_positions, skipped_notes
 
@@ -644,7 +660,10 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
     fig.update_layout(margin=dict(l=70, r=25, t=20, b=60), legend=dict(orientation="h", x=0.0, y=1.12))
     slice_slug = f"_slice_{slice_filter:g}".replace(".", "p") if slice_filter is not None else ""
     filename = f"{slugify(case_id)}_{grid_level}_{participant.participant_id}_{dataset_data.dataset_id}{slice_slug}_combined_beta"
-    return figure_to_html_div(fig, filename=filename), trace_count, slice_positions
+    plot_title = f"Collection Efficiency vs s | {grid_level} | {label}"
+    if slice_filter is not None:
+        plot_title += f" | Y = {slice_filter:g} m"
+    return figure_to_html_div(fig, filename=filename, plot_title=plot_title), trace_count, slice_positions
 
 
 def build_combined_beta_card(participant, dataset_data, case_id: str, grid_level: str, grid_data, slice_filter: float | None = None) -> str:
@@ -745,7 +764,11 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
             else:
                 slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
                 filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}_all_roughness"
-                figure_html = figure_to_html_div(combined_fig, filename=filename)
+                figure_html = figure_to_html_div(
+                    combined_fig,
+                    filename=filename,
+                    plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
+                )
             figures_html += f"""
             <section class="slice-plot-group">
               <h5>{escape(full_title)}</h5>
@@ -781,7 +804,11 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
                 slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
                 roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
                 filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}{roughness_slug}"
-                figure_html = figure_to_html_div(fig, filename=filename)
+                figure_html = figure_to_html_div(
+                    fig,
+                    filename=filename,
+                    plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
+                )
 
             figures_html += f"""
             <section class="slice-plot-group">

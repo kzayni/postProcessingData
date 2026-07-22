@@ -852,7 +852,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--p", "--participant", dest="participant_id", help="Build a preview containing only one participant ID, for example --p 004.")
     parser.add_argument("--slides", action="store_true", help="Build index.html as a one-plot-per-slide presentation with sidebar and previous/next controls.")
     parser.add_argument("--png", action="store_true", help="Export every generated plot as a PNG instead of building HTML pages.")
-    parser.add_argument("--lower-res", action="store_true", help="Export PNGs at 1200x900 instead of the default 3600x2700. Used with --png.")
+    parser.add_argument("--lower-res", action="store_true", help="Export PNGs at 1350x900 instead of the default 4050x2700. Used with --png.")
     return parser.parse_args()
 
 

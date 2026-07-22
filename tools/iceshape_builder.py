@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
-from .participant_style import normalize_participant_id, participant_color, participant_legend_rank
+from .participant_style import participant_color, participant_legend_rank
 
 
 # Central place to tune ice-shape figure axes.
@@ -25,6 +25,7 @@ ICE_SHAPE_AXIS_SETTINGS = {
         "y_title": "Z [m]",
         "x_range": None,
         "y_range": None,
+        "leading_edge_fraction": 0.25,
     },
     "TC_ONERAM6": {
         "default": {
@@ -255,14 +256,19 @@ def flush_png_exports(scale: int = 3) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=1200, height=900, scale=scale)
+    pio.write_images(list(figures), list(paths), width=1350, height=900, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
-def figure_to_html_div(fig: go.Figure, filename: str) -> str:
+def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
     if PNG_EXPORT_DIR is not None:
         PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-        PNG_EXPORT_QUEUE.append((fig, PNG_EXPORT_DIR / f"{filename}.png"))
+        png_fig = go.Figure(fig)
+        png_fig.update_layout(
+            title=dict(text=plot_title, x=0.5, xanchor="center"),
+            margin=dict(t=100),
+        )
+        PNG_EXPORT_QUEUE.append((png_fig, PNG_EXPORT_DIR / f"{filename}.png"))
         return ""
     figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
     if DEFER_PLOTLY_DIR is not None:
@@ -314,6 +320,40 @@ def style_xy_figure(
         paper_bgcolor="white",
     )
     return fig
+
+
+def leading_edge_axis_ranges(fig: go.Figure, chord_fraction: float = 0.25) -> tuple[list[float] | None, list[float] | None]:
+    """Return padded axis limits around the leading-edge portion of the local chord."""
+    points: list[tuple[float, float]] = []
+    for trace in fig.data:
+        if trace.x is None or trace.y is None:
+            continue
+        x_values = pd.to_numeric(pd.Series(trace.x), errors="coerce")
+        y_values = pd.to_numeric(pd.Series(trace.y), errors="coerce")
+        valid = x_values.notna() & y_values.notna()
+        points.extend(zip(x_values[valid].astype(float), y_values[valid].astype(float)))
+
+    if not points:
+        return None, None
+
+    x_min = min(x for x, _ in points)
+    x_max = max(x for x, _ in points)
+    chord = x_max - x_min
+    if chord <= 0.0:
+        return None, None
+
+    window = chord * chord_fraction
+    window_max = x_min + window
+    leading_edge_y = [y for x, y in points if x <= window_max]
+    if not leading_edge_y:
+        return None, None
+
+    x_padding = 0.03 * window
+    y_min = min(leading_edge_y)
+    y_max = max(leading_edge_y)
+    y_span = y_max - y_min
+    y_padding = max(0.08 * y_span, 0.02 * window)
+    return [x_min - x_padding, window_max + x_padding], [y_min - y_padding, y_max + y_padding]
 
 
 def ice_shape_axis_config(case_id: str, slice_filter: float | None) -> dict[str, Any]:
@@ -467,22 +507,11 @@ def collect_ice_shape_participant_roughness_summary(participants, case_id: str, 
     return summary
 
 
-def use_rotated_naca0012_reference(participants) -> bool:
-    """Use CIRA's post-processing geometry only for a participant-001 build."""
-    participant_ids = {
-        normalize_participant_id(participant.participant_id)
-        for participant in participants
-    }
-    return participant_ids == {"001"}
-
-
 def clean_reference_path_for_case(case_id: str, participants=None) -> Path | None:
     if "ONERAM6" in case_id.upper():
         return Path("R00_REFERENCE") / "ONERAM6_CLEAN.dat"
     if "NACA0012" in case_id.upper():
-        if participants is not None and use_rotated_naca0012_reference(participants):
-            return Path("R00_REFERENCE") / "NACA0012_CLEAN_ROTATED.dat"
-        return Path("R00_REFERENCE") / "NACA0012_CLEAN.dat"
+        return Path("R00_REFERENCE") / "NACA0012_CLEAN_ROTATED.dat"
     return None
 
 
@@ -707,12 +736,13 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
             trace_count += 1
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
+    leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
     style_xy_figure(
         fig,
         axis_config["x_title"],
         axis_config["y_title"],
-        x_range=axis_config["x_range"],
-        y_range=axis_config["y_range"],
+        x_range=axis_config["x_range"] or leading_x_range,
+        y_range=axis_config["y_range"] or leading_y_range,
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1.0)
 
@@ -788,12 +818,13 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
             trace_count += 1
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
+    leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
     style_xy_figure(
         fig,
         axis_config["x_title"],
         axis_config["y_title"],
-        x_range=axis_config["x_range"],
-        y_range=axis_config["y_range"],
+        x_range=axis_config["x_range"] or leading_x_range,
+        y_range=axis_config["y_range"] or leading_y_range,
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1.0)
     return fig, trace_count, slice_positions
@@ -851,7 +882,11 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
                     )
                 else:
                     single_filename = f"{slugify(case_id)}_{grid_level}_single_layer_ice_shape{slice_slug}{bins_slug}{roughness_slug}"
-                    single_figure_html = figure_to_html_div(single_fig, filename=single_filename)
+                    single_figure_html = figure_to_html_div(
+                        single_fig,
+                        filename=single_filename,
+                        plot_title=f"Single-layer ice shape | {grid_level} | {bin_title}",
+                    )
 
                 single_figures_html += f"""
                 <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
@@ -870,7 +905,11 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
                     )
                 else:
                     multi_filename = f"{slugify(case_id)}_{grid_level}_multilayer_ice_shape{slice_slug}{bins_slug}{roughness_slug}"
-                    multi_figure_html = figure_to_html_div(multi_fig, filename=multi_filename)
+                    multi_figure_html = figure_to_html_div(
+                        multi_fig,
+                        filename=multi_filename,
+                        plot_title=f"Multi-layer final ice shape | {grid_level} | {bin_title}",
+                    )
 
                 multi_figures_html += f"""
                 <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">

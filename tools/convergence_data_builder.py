@@ -247,14 +247,19 @@ def flush_png_exports(scale: int = 3) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=1200, height=900, scale=scale)
+    pio.write_images(list(figures), list(paths), width=1350, height=900, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
-def figure_to_html_div(fig: go.Figure, filename: str) -> str:
+def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
     if PNG_EXPORT_DIR is not None:
         PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-        PNG_EXPORT_QUEUE.append((fig, PNG_EXPORT_DIR / f"{filename}.png"))
+        png_fig = go.Figure(fig)
+        png_fig.update_layout(
+            title=dict(text=plot_title, x=0.5, xanchor="center"),
+            margin=dict(t=100),
+        )
+        PNG_EXPORT_QUEUE.append((png_fig, PNG_EXPORT_DIR / f"{filename}.png"))
         return ""
     figure_html = fig.to_html(full_html=False, include_plotlyjs="cdn", config=plotly_config(filename))
     if DEFER_PLOTLY_DIR is not None:
@@ -268,15 +273,6 @@ def figure_to_html_div(fig: go.Figure, filename: str) -> str:
     return figure_html
 
 
-def empty_placeholder(title: str, message: str) -> str:
-    return f"""
-    <div class="placeholder-card">
-      <h4>{escape(title)}</h4>
-      <p>{escape(message)}</p>
-    </div>
-    """
-
-
 def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 520) -> go.Figure:
     x_title = f"{x_label} <br><span style='font-size:14px'>&lt;- Finer (more cells)&nbsp;&nbsp;|&nbsp;&nbsp;Coarser (fewer cells) -&gt;</span>"
     fig.update_layout(
@@ -285,8 +281,8 @@ def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 52
         height=height,
         title=None,
         showlegend=True,
-        xaxis=dict(title=dict(text=x_title, font=dict(size=18)), type="log", tickformat=".2e", exponentformat="power", showexponent="all", ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
-        yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        xaxis=dict(title=dict(text=x_title, font=dict(size=18)), type="log", dtick="D2", tickformat=".2e", exponentformat="power", showexponent="all", ticks="outside", automargin=True, showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", automargin=True, showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
         legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
         margin=dict(l=90, r=220, t=30, b=95),
         plot_bgcolor="white",
@@ -476,10 +472,10 @@ def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec
     fig, trace_count, skipped_notes = build_grid_convergence_figure(participants, case_id, plot_spec)
 
     if trace_count == 0:
-        figure_html = empty_placeholder(title=plot_spec["title"], message="No matching gridConvergence variables were found yet for this case.")
-    else:
-        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}"
-        figure_html = figure_to_html_div(fig, filename=filename)
+        return ""
+
+    filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}"
+    figure_html = figure_to_html_div(fig, filename=filename, plot_title=plot_spec["title"])
 
     description = "Grid-convergence data from the case-level gridConvergence file. Missing values equal to -999 are ignored. Legend: Participant ID."
 
@@ -504,6 +500,9 @@ def build_grid_convergence_section(participants, case_id: str) -> str:
 
     for plot_spec in GRID_CONVERGENCE_PLOTS:
         html += build_grid_convergence_plot_subsection(participants, case_id, plot_spec)
+
+    if not html.strip():
+        return ""
 
     return f"""
     <section class="plot-subsection grid-convergence-section plot-filter-scope">
@@ -623,12 +622,7 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
     groups = collect_diameter_groups(participants, case_id, plot_spec)
 
     if not groups:
-        return f"""
-        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
-          <h4>{escape(plot_spec["title"])}</h4>
-          {empty_placeholder(title=plot_spec["title"], message="No diameter-resolved grid-convergence data were found yet for this case.")}
-        </section>
-        """
+        return ""
 
     html = ""
 
@@ -638,10 +632,10 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
         title = f"{plot_spec['title']} | {bin_set} | Diameter {bin_number:g} | D = {diameter:g} μm"
 
         if trace_count == 0:
-            figure_html = empty_placeholder(title=title, message="No matching values were found for this diameter.")
-        else:
-            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(bin_set)}_diameter_{bin_number:g}_{diameter:g}".replace(".", "p")
-            figure_html = figure_to_html_div(fig, filename=filename)
+            continue
+
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(bin_set)}_diameter_{bin_number:g}_{diameter:g}".replace(".", "p")
+        figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
 
         html += f"""
         <section class="slice-plot-group">
@@ -651,6 +645,9 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
           </div>
         </section>
         """
+
+    if not html.strip():
+        return ""
 
     return f"""
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
@@ -735,6 +732,106 @@ def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: di
                     grid_levels.add(f"L{level_number}")
 
     return sorted(grid_levels, key=grid_level_number_from_value)
+
+
+def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
+    """Return submitted required bin distributions that contain plottable values."""
+    bin_sets: set[str] = set()
+
+    for participant, case_data in iter_case_data(participants, case_id):
+        if case_data.grid_convergence_data is None:
+            continue
+
+        for zone_name, zone in case_data.grid_convergence_data.zones.items():
+            if "by_diameter" in zone_name.lower() or not is_required_grid_convergence_zone(zone):
+                continue
+
+            bin_set = extract_icing_bin_set_from_zone_name(zone_name)
+            if bin_set is None:
+                continue
+
+            x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+            if x_column is None or y_column is None:
+                continue
+
+            data = valid_numeric_rows(zone.data, x_column, y_column, positive_columns={x_column})
+            if not data.empty:
+                bin_sets.add(bin_set)
+
+    return sorted(bin_sets, key=lambda value: (bin_count_from_bin_set(value) or float("inf"), value))
+
+
+def build_distribution_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_bin_set: str) -> tuple[go.Figure, int]:
+    """Plot one droplet distribution across every available grid level."""
+    fig = go.Figure()
+    trace_count = 0
+
+    for participant, case_data in iter_case_data(participants, case_id):
+        if case_data.grid_convergence_data is None:
+            continue
+
+        label = participant_label(participant)
+        color = participant_color(participant.participant_id)
+        participant_rows: list[pd.DataFrame] = []
+
+        for zone_name, zone in case_data.grid_convergence_data.zones.items():
+            if "by_diameter" in zone_name.lower() or not is_required_grid_convergence_zone(zone):
+                continue
+            if extract_icing_bin_set_from_zone_name(zone_name) != target_bin_set:
+                continue
+
+            x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+            grid_column = find_column_case_insensitive(zone.data.columns, ["GRID_LEVEL", "GridLevel"])
+            if x_column is None or y_column is None:
+                continue
+
+            selected_columns = [x_column, y_column]
+            if grid_column is not None and grid_column not in selected_columns:
+                selected_columns.append(grid_column)
+            data = valid_numeric_rows(zone.data[selected_columns].copy(), x_column, y_column, positive_columns={x_column})
+            data = add_grid_spacing_column(data, case_id, x_column, grid_column=grid_column)
+            if not data.empty:
+                participant_rows.append(data)
+
+        if not participant_rows:
+            continue
+
+        data = pd.concat(participant_rows).sort_values(GRID_SPACING_COLUMN)
+        # A required distribution should have one value per level. If duplicate
+        # zones exist, retain the first submitted value instead of drawing loops.
+        data = data.drop_duplicates(subset=["GRID_LEVEL_DISPLAY"], keep="first")
+        y_column = find_column_case_insensitive(data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+        if y_column is None:
+            continue
+
+        fig.add_trace(
+            go.Scatter(
+                x=data[GRID_SPACING_COLUMN],
+                y=data[y_column],
+                mode="lines+markers",
+                name=label,
+                legendgroup=label,
+                legendrank=participant_legend_rank(participant.participant_id),
+                line=dict(color=color),
+                marker=dict(color=color, size=9),
+                customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
+                hovertemplate=(
+                    f"Participant: {escape(label)}<br>"
+                    f"Case: {escape(case_id)}<br>"
+                    f"Distribution: {escape(target_bin_set)}<br>"
+                    f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>"
+                    f"{escape(y_column)}=%{{y}}<br>"
+                    "Grid level=%{customdata[0]}<br>"
+                    "Num cells=%{customdata[1]:,.0f}<extra></extra>"
+                ),
+            )
+        )
+        trace_count += 1
+
+    style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    return fig, trace_count
 
 
 def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_grid_level: str) -> tuple[go.Figure, int, list[str]]:
@@ -839,16 +936,32 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
 
 def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
     grid_levels = collect_combined_icing_grid_levels(participants, case_id, plot_spec)
+    bin_sets = collect_combined_icing_bin_sets(participants, case_id, plot_spec)
 
-    if not grid_levels:
-        return f"""
-        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
-          <h4>{escape(plot_spec["title"])}</h4>
-          {empty_placeholder(title=plot_spec["title"], message="No combined icing grid-convergence data were found yet for this case.")}
+    if not grid_levels and not bin_sets:
+        return ""
+
+    distributions_html = ""
+    figures_html = ""
+
+    for bin_set in bin_sets:
+        fig, trace_count = build_distribution_icing_figure(participants, case_id, plot_spec, bin_set)
+        if trace_count == 0:
+            continue
+
+        bin_count = bin_count_from_bin_set(bin_set)
+        distribution_label = f"{bin_count}-bin distribution" if bin_count != 1 else "Single-bin distribution"
+        title = f"{plot_spec['title']} | {distribution_label} | All grid levels"
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(bin_set)}_all_grid_levels"
+        figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
+        distributions_html += f"""
+        <section class="slice-plot-group">
+          <h5>{escape(title)}</h5>
+          <div class="plot-container">
+            {figure_html}
+          </div>
         </section>
         """
-
-    figures_html = ""
 
     for grid_level in grid_levels:
         fig, trace_count, skipped_notes = build_combined_icing_figure(participants, case_id, plot_spec, grid_level)
@@ -856,10 +969,10 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
         title = f"{plot_spec['title']} | {grid_level}"
 
         if trace_count == 0:
-            figure_html = empty_placeholder(title=title, message="No matching combined values were found for this grid level.")
-        else:
-            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(grid_level)}_vs_inverse_bins"
-            figure_html = figure_to_html_div(fig, filename=filename)
+            continue
+
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(grid_level)}_vs_inverse_bins"
+        figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
 
         figures_html += f"""
         <section class="slice-plot-group">
@@ -870,13 +983,41 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
         </section>
         """
 
+    if not distributions_html.strip() and not figures_html.strip():
+        return ""
+
+    distribution_group = ""
+    if distributions_html.strip():
+        distribution_group = f"""
+        <div class="convergence-orientation-group">
+          <h5>Each distribution across all grid levels</h5>
+          <p class="plot-description">
+            One figure per droplet distribution (single-bin, 3-bin, and any other submitted required distributions), compared across every available grid level. Legend: Participant ID.
+          </p>
+          {distributions_html}
+        </div>
+        """
+
+    level_group = ""
+    if figures_html.strip():
+        level_group = f"""
+        <div class="convergence-orientation-group">
+          <h5>All distributions at each grid level</h5>
+          <p class="plot-description">
+            One figure per grid level, with required droplet distributions plotted against 1 / number of bins. Legend: Participant ID.
+          </p>
+          {figures_html}
+        </div>
+        """
+
     return f"""
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
-        Combined icing data from required sheets plotted against 1 / number of bins. Each figure corresponds to one grid level. Missing values equal to -999 are ignored. Legend: Participant ID.
+        Grid convergence for the required icing distributions in both comparison directions. Missing values equal to -999 are ignored.
       </p>
-      {figures_html}
+      {distribution_group}
+      {level_group}
     </section>
     """
 
@@ -884,12 +1025,7 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
     roughness_keys = collect_cfd_roughness_keys(participants, case_id, plot_spec)
 
     if not roughness_keys:
-        return f"""
-        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
-          <h4>{escape(plot_spec["title"])}</h4>
-          {empty_placeholder(title=plot_spec["title"], message="No matching CFD gridConvergence variables were found yet for this case.")}
-        </section>
-        """
+        return ""
 
     figures_html = ""
 
@@ -908,10 +1044,14 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
 
         title = "All roughness heights"
         if combined_trace_count == 0 or combined_fig is None:
-            figure_html = empty_placeholder(title=title, message="No matching values were found.")
-        else:
-            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_all_roughness"
-            figure_html = figure_to_html_div(combined_fig, filename=filename)
+            return ""
+
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_all_roughness"
+        figure_html = figure_to_html_div(
+            combined_fig,
+            filename=filename,
+            plot_title=f"{plot_spec['title']} | {title}",
+        )
         return f"""
         <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
           <h4>{escape(plot_spec["title"])}</h4>
@@ -931,10 +1071,14 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
         roughness_title = format_roughness_title(roughness_key)
 
         if trace_count == 0:
-            figure_html = empty_placeholder(title=roughness_title, message="No matching values were found for this roughness.")
-        else:
-            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(roughness_key)}"
-            figure_html = figure_to_html_div(fig, filename=filename)
+            continue
+
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(roughness_key)}"
+        figure_html = figure_to_html_div(
+            fig,
+            filename=filename,
+            plot_title=f"{plot_spec['title']} | {roughness_title}",
+        )
 
         figures_html += f"""
         <section class="slice-plot-group">
@@ -944,6 +1088,9 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
           </div>
         </section>
         """
+
+    if not figures_html.strip():
+        return ""
 
     return f"""
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">

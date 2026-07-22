@@ -49,6 +49,8 @@ VALID_GRID_LEVELS = {"L1", "L2", "L3", "L4"}
 HighlightPoint = tuple[Optional[float], Optional[float], Optional[float]]
 HighlightPointsByCase = dict[str, HighlightPoint]
 DEFAULT_CUTDATA_HIGHLIGHT_POINT: HighlightPoint = (0.0, None, 0.0)
+NACA0012_ROTATION_DEGREES = 4.0
+NACA0012_ROTATION_CENTER_X = 0.13335
 
 
 # =============================================================================
@@ -198,7 +200,12 @@ class DatasetData:
             self.cut_data = read_tecplot_dat(self.cut_data_file, case_id=case_id, highlight_points_by_case=highlight_points_by_case, clean_s_cache=clean_s_cache)
 
         if self.ice_shape_file is not None:
-            self.ice_shape_data = read_tecplot_dat(self.ice_shape_file)
+            ice_shape_path = rotated_ice_shape_path_for_plotting(
+                self.ice_shape_file,
+                case_id=case_id,
+                clean_cache=clean_s_cache,
+            )
+            self.ice_shape_data = read_tecplot_dat(ice_shape_path)
 
     def get_cut_zone(self, bins_id: str, slice_position: float | None = None) -> ZoneData | None:
         """
@@ -776,6 +783,84 @@ def add_curvilinear_distance_to_cutdata(data: TecplotData, case_id: str | None =
         data.variables.append("s")
 
     write_curvilinear_mapping_file(mapping_path, data, mappings)
+
+
+def rotated_ice_shape_path(path: Path) -> Path:
+    """Return the cached NACA0012 ice-shape rotation sidecar path."""
+    return path.with_name(f"{path.stem}_rotated.dat")
+
+
+def participant_id_from_submission_path(path: Path) -> str | None:
+    """Extract a three-digit participant ID from a file or one of its parents."""
+    for candidate in (path, *path.parents):
+        match = re.match(r"^(\d{3})(?:_|$)", candidate.name)
+        if match is not None:
+            return match.group(1)
+    return None
+
+
+def write_tecplot_data(path: Path, data: TecplotData) -> None:
+    """Write parsed Tecplot point data to a compact, reusable ASCII sidecar."""
+    lines: list[str] = []
+    if data.title:
+        lines.append(f'TITLE = "{data.title}"')
+    for key, value in data.auxdata.items():
+        lines.append(f'AUXDATA {key} = "{value}"')
+    lines.append("VARIABLES = " + " ".join(f'\"{variable}\"' for variable in data.variables))
+
+    for zone_name, zone in data.zones.items():
+        lines.append("")
+        lines.append(f'ZONE T="{zone_name}"')
+        for key, value in zone.auxdata.items():
+            lines.append(f'AUXDATA {key} = "{value}"')
+        for row in zone.data.itertuples(index=False, name=None):
+            lines.append(" ".join(f"{float(value):.12g}" for value in row))
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def rotate_naca0012_ice_shape(data: TecplotData) -> None:
+    """Rotate all available clean/iced X-Z coordinate pairs by +4 degrees."""
+    angle = math.radians(NACA0012_ROTATION_DEGREES)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    candidate_pairs = [
+        (["X_ICED", "X_iced", "CoordinateX_Iced", "CoordinateX_iced"], ["Z_ICED", "Z_iced", "CoordinateZ_Iced", "CoordinateZ_iced"]),
+        (["X", "CoordinateX"], ["Z", "CoordinateZ"]),
+    ]
+
+    for zone in data.zones.values():
+        for x_candidates, z_candidates in candidate_pairs:
+            x_column = find_column_case_insensitive(zone.data.columns, x_candidates)
+            z_column = find_column_case_insensitive(zone.data.columns, z_candidates)
+            if x_column is None or z_column is None:
+                continue
+
+            x_values = pd.to_numeric(zone.data[x_column], errors="coerce")
+            z_values = pd.to_numeric(zone.data[z_column], errors="coerce")
+            valid = x_values.notna() & z_values.notna() & (x_values > -998.0) & (z_values > -998.0)
+            centered_x = x_values[valid] - NACA0012_ROTATION_CENTER_X
+            zone.data.loc[valid, x_column] = NACA0012_ROTATION_CENTER_X + centered_x * cosine - z_values[valid] * sine
+            zone.data.loc[valid, z_column] = centered_x * sine + z_values[valid] * cosine
+
+
+def rotated_ice_shape_path_for_plotting(path: Path, case_id: str | None, clean_cache: bool = False) -> Path:
+    """Create/use a rotated NACA0012 sidecar except for already-rotated CIRA data."""
+    if case_id is None or "NACA0012" not in case_id.upper():
+        return path
+    if participant_id_from_submission_path(path) == "001":
+        return path
+
+    output_path = rotated_ice_shape_path(path)
+    if not clean_cache and output_path.exists() and output_path.stat().st_mtime >= path.stat().st_mtime:
+        return output_path
+
+    data = read_tecplot_dat(path, process_cutdata=False)
+    rotate_naca0012_ice_shape(data)
+    data.path = output_path
+    data.title = f"{data.title or path.stem} | NACA0012 coordinates rotated +4 degrees about X=0.13335 m"
+    write_tecplot_data(output_path, data)
+    return output_path
 
 
 # =============================================================================
@@ -1376,6 +1461,9 @@ def identify_file_type(name: str) -> Optional[str]:
     if re.search(r"sMap", name, re.IGNORECASE):
         return "sMap"
 
+    if re.search(r"iceShape.*_rotated(?:\.|$)", name, re.IGNORECASE):
+        return "rotatedIceShape"
+
     if re.search(r"gridConvergence", name, re.IGNORECASE):
         return "gridConvergence"
 
@@ -1438,7 +1526,7 @@ def attach_file_to_participant(participant: Participant, file_path: Path, defaul
         return
 
     file_type = identify_file_type(file_path.name)
-    if file_type == "sMap":
+    if file_type in {"sMap", "rotatedIceShape"}:
         return
 
     case_id = extract_case_id_from_name(file_path.name) or default_case_id
