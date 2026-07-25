@@ -38,10 +38,28 @@ PARTICIPANTS = [
         "Name(s)": "Jeewong Kim",
     },
     {
+        "Participant ID": "008",
+        "Organization": "Collins Aerospace",
+        "Solver(s)": "FENSAPICE",
+        "Name(s)": "Mateusz Pawlucki",
+    },
+    {
+        "Participant ID": "010",
+        "Organization": "NASA",
+        "Solver(s)": "GlennICE",
+        "Name(s)": "Thomas Ozoroski",
+    },
+    {
         "Participant ID": "014",
         "Organization": "Airbus",
         "Solver(s)": "CODA IGLOO3D",
         "Name(s)": "Alberto Della Noce",
+    },
+    {
+        "Participant ID": "015",
+        "Organization": "NIAR",
+        "Solver(s)": "FENSAPICE",
+        "Name(s)": "Harsh Shah",
     },
     {
         "Participant ID": "019",
@@ -63,10 +81,80 @@ PARTICIPANT_COLORS = {
     "004": "#4d7502",
     "006": "#4f0077",
     "007": "#1f77b4",
+    "008": "#ff0000",
     "009": "#ad1d03",
+    "010": "#a3af00",
     "014": "#aa00ff",
+    "015": "#ff0080",
     "019": "#e39000",
     "020": "#573700",
+}
+
+# Set each participant to True or False to show or hide its markers.
+PARTICIPANTS_MARKERS = {
+    "001": False,
+    "002": False,
+    "004": False,
+    "006": False,
+    "007": False,
+    "008": False,
+    "009": False,
+    "010": False,
+    "014": False,
+    "015": False,
+    "019": False,
+    "020": False,
+}
+
+# Shape options include: circle, square, diamond, cross, x, triangle-up,
+# triangle-down, triangle-left, triangle-right, pentagon, hexagon, and star.
+PARTICIPANT_MARKER_SHAPES = {
+    "001": "circle",
+    "002": "circle",
+    "004": "circle",
+    "006": "circle",
+    "007": "circle",
+    "008": "circle",
+    "009": "circle",
+    "010": "circle",
+    "014": "circle",
+    "015": "circle",
+    "019": "circle",
+    "020": "circle",
+}
+
+# Marker size is in pixels. Typical values are 6 (small), 9 (medium),
+# 12 (large), and 16 (extra large).
+PARTICIPANT_MARKER_SIZES = {
+    "001": 9,
+    "002": 9,
+    "004": 9,
+    "006": 9,
+    "007": 9,
+    "008": 9,
+    "009": 9,
+    "010": 9,
+    "014": 9,
+    "015": 9,
+    "019": 9,
+    "020": 9,
+}
+
+# Show a marker every N data points on non-convergence plots.
+# For example: 1 = every point, 5 = every fifth point, 10 = every tenth point.
+PARTICIPANT_MARKER_FREQUENCIES = {
+    "001": 1,
+    "002": 1,
+    "004": 1,
+    "006": 1,
+    "007": 1,
+    "008": 1,
+    "009": 1,
+    "010": 1,
+    "014": 1,
+    "015": 1,
+    "019": 1,
+    "020": 1,
 }
 
 PREVIEW_PARTICIPANT_NAME = "All participants"
@@ -81,6 +169,28 @@ def normalize_participant_id(participant_id: str | int) -> str:
 
 def participant_color(participant_id: str) -> str:
     return PARTICIPANT_COLORS.get(normalize_participant_id(participant_id), "black")
+
+
+def participant_trace_mode(participant_id: str | int) -> str:
+    normalized_id = normalize_participant_id(participant_id)
+    return "lines+markers" if PARTICIPANTS_MARKERS.get(normalized_id, False) else "lines"
+
+
+def participant_marker(participant_id: str | int, point_count: int | None = None) -> dict:
+    normalized_id = normalize_participant_id(participant_id)
+    marker_size = PARTICIPANT_MARKER_SIZES.get(normalized_id, 9)
+    if point_count is not None:
+        frequency = max(1, PARTICIPANT_MARKER_FREQUENCIES.get(normalized_id, 1))
+        marker_size = [
+            marker_size if point_index % frequency == 0 else 0
+            for point_index in range(point_count)
+        ]
+
+    return {
+        "color": participant_color(normalized_id),
+        "symbol": PARTICIPANT_MARKER_SHAPES.get(normalized_id, "circle"),
+        "size": marker_size,
+    }
 
 
 def participant_legend_rank(participant_id: str | int) -> int:

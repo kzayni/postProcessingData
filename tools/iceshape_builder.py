@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
-from .participant_style import participant_color, participant_legend_rank
+from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
 
 
 # Central place to tune ice-shape figure axes.
@@ -78,6 +78,93 @@ ICE_SHAPE_AXIS_SETTINGS = {
         },
     },
 }
+
+EXPERIMENTAL_ICE_SHAPE_FILES = {
+    "TC_NACA0012_AE3932": Path("E00_Experimental-Data") / "EXP_AE3932.dat",
+    "TC_NACA0012_AE3933": Path("E00_Experimental-Data") / "EXP_AE3933.dat",
+}
+
+INCHES_TO_METRES = 0.0254
+
+# Edit experimental ice-shape appearance here.
+#
+# Contour keys:
+#   "MAXCCS", "MEANCCS", and "MINCCS"
+# Each case's styles are shared by the single-layer and final-layer plots.
+# Common Plotly values:
+#   show_markers  = True to show markers or False for no markers
+#   line_color    = any CSS color name or hex color
+#   marker_color  = any CSS color name or hex color (independent of line_color)
+#   line_dash     = "solid", "dot", "dash", "longdash", "dashdot", or "longdashdot"
+#   marker_symbol = "circle", "square", "diamond", "cross", "x", etc.
+#   marker_frequency = 1 for every point, 10 for every tenth point, etc.
+EXPERIMENTAL_ICE_SHAPE_STYLES = {
+    "TC_NACA0012_AE3932": {
+        "MAXCCS": {
+            "show_markers": True,
+            "line_color": "#010002",
+            "marker_color": "#ff56be",
+            "line_width": 2,
+            "line_dash": "solid",
+            "marker_size": 8,
+            "marker_symbol": "square",
+            "marker_frequency": 50,
+        },
+        "MEANCCS": {
+            "show_markers": False,
+            "line_color": "#010002",
+            "marker_color": "#ff56be",
+            "line_width": 3,
+            "line_dash": "solid",
+            "marker_size": 8,
+            "marker_symbol": "square",
+            "marker_frequency": 1,
+        },
+        "MINCCS": {
+            "show_markers": True,
+            "line_color": "#010002",
+            "marker_color": "#ff56be",
+            "line_width": 2,
+            "line_dash": "solid",
+            "marker_size": 8,
+            "marker_symbol": "square",
+            "marker_frequency": 50,
+        },
+    },
+    "TC_NACA0012_AE3933": {
+        "MAXCCS": {
+            "show_markers": True,
+            "line_color": "#010002",
+            "marker_color": "#ff56be",
+            "line_width": 2,
+            "line_dash": "solid",
+            "marker_size": 8,
+            "marker_symbol": "square",
+            "marker_frequency": 50,
+        },
+        "MEANCCS": {
+            "show_markers": False,
+            "line_color": "#010002",
+            "marker_color": "#ff56be",
+            "line_width": 3,
+            "line_dash": "solid",
+            "marker_size": 8,
+            "marker_symbol": "square",
+            "marker_frequency": 1,
+        },
+        "MINCCS": {
+            "show_markers": True,
+            "line_color": "#010002",
+            "marker_color": "#ff56be",
+            "line_width": 2,
+            "line_dash": "solid",
+            "marker_size": 8,
+            "marker_symbol": "square",
+            "marker_frequency": 50,
+        },
+    },
+}
+
 
 def slugify(text: str) -> str:
     text = text.strip().lower()
@@ -615,6 +702,7 @@ def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float 
                 mode="lines",
                 name="Clean reference",
                 legendgroup="clean_reference",
+                legendrank=1003,
                 line=dict(color="black", width=2),
                 hovertemplate=(
                     f"Case: {escape(case_id)}<br>"
@@ -634,6 +722,96 @@ def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float 
     return trace_count, slice_positions
 
 
+@lru_cache(maxsize=None)
+def load_experimental_ice_shape_data(experimental_path_text: str):
+    with redirect_stdout(io.StringIO()):
+        return read_tecplot_dat(Path(experimental_path_text), process_cutdata=False)
+
+
+def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
+    """Overlay the corresponding E00 experimental contours on NACA0012 plots.
+
+    The E00 files contain X/Y section coordinates in inches. The website plots
+    ice shapes as X/Z in metres, so the experimental Y coordinate is converted
+    to the plotted Z coordinate here.
+    """
+    experimental_path = EXPERIMENTAL_ICE_SHAPE_FILES.get(case_id)
+    if experimental_path is None or not experimental_path.exists():
+        return 0
+
+    experimental_data = load_experimental_ice_shape_data(str(experimental_path))
+    trace_count = 0
+
+    for zone_name, zone in experimental_data.zones.items():
+        x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
+        y_column = find_column_case_insensitive(zone.data.columns, ["Y", "CoordinateY"])
+        if x_column is None or y_column is None:
+            continue
+
+        x_values = pd.to_numeric(zone.data[x_column], errors="coerce") * INCHES_TO_METRES
+        z_values = pd.to_numeric(zone.data[y_column], errors="coerce") * INCHES_TO_METRES
+        valid = x_values.notna() & z_values.notna()
+        if not valid.any():
+            continue
+
+        normalized_zone_name = zone_name.replace("_", "").upper()
+        style = (
+            EXPERIMENTAL_ICE_SHAPE_STYLES
+            .get(case_id, {})
+            .get(
+                normalized_zone_name,
+                {"show_markers": True, "line_color": "#d62728", "marker_color": "#d62728", "line_width": 2, "line_dash": "solid", "marker_size": 5, "marker_symbol": "circle", "marker_frequency": 1},
+            )
+        )
+        marker_frequency = max(1, int(style["marker_frequency"]))
+        marker_sizes = [
+            style["marker_size"] if point_index % marker_frequency == 0 else 0
+            for point_index in range(int(valid.sum()))
+        ]
+        contour_label = {
+            "MAXCCS": "Max",
+            "MEANCCS": "Mean",
+            "MINCCS": "Min",
+        }.get(normalized_zone_name, zone_name)
+        legend_rank = {
+            "MAXCCS": 1000,
+            "MEANCCS": 1001,
+            "MINCCS": 1002,
+        }.get(normalized_zone_name, 1002)
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_values[valid],
+                y=z_values[valid],
+                mode="lines+markers" if style["show_markers"] else "lines",
+                name=f"Exp. {contour_label}",
+                legendgroup=f"experimental_{normalized_zone_name.lower()}",
+                legendrank=legend_rank,
+                line=dict(
+                    color=style["line_color"],
+                    width=style["line_width"],
+                    dash=style["line_dash"],
+                ),
+                marker=dict(
+                    color=style["marker_color"],
+                    size=marker_sizes,
+                    symbol=style["marker_symbol"],
+                    opacity=1.0,
+                ),
+                hovertemplate=(
+                    f"Case: {escape(case_id)}<br>"
+                    f"Source: {escape(str(experimental_path))}<br>"
+                    f"Experimental contour: {escape(contour_label)}<br>"
+                    "X=%{x} m<br>"
+                    "Z=%{y} m<extra></extra>"
+                ),
+            )
+        )
+        trace_count += 1
+
+    return trace_count
+
+
 def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
     """Build the single-layer ice-shape figure from iceShape zones.
 
@@ -647,9 +825,8 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
     """
 
     fig = go.Figure()
-    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter, participants=participants)
     trace_count = 0
-    slice_positions: list[float] = list(reference_slice_positions)
+    slice_positions: list[float] = []
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
         if dataset_data.ice_shape_data is None:
@@ -711,11 +888,12 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 go.Scatter(
                     x=plot_data[x_iced_column],
                     y=plot_data[z_iced_column],
-                    mode="lines",
+                    mode=participant_trace_mode(participant.participant_id),
                 name=trace_name,
                 legendgroup=label,
                 legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
+                    marker=participant_marker(participant.participant_id, len(plot_data)),
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
                         f"Case: {escape(case_id)}<br>"
@@ -735,6 +913,10 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
 
             trace_count += 1
 
+    add_experimental_ice_shape_traces(fig, case_id)
+    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter, participants=participants)
+    slice_positions.extend(reference_slice_positions)
+
     axis_config = ice_shape_axis_config(case_id, slice_filter)
     leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
     style_xy_figure(
@@ -751,9 +933,8 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
 
 def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: str, slice_filter: float | None = None, bins_filter: str | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float]]:
     fig = go.Figure()
-    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter, participants=participants)
     trace_count = 0
-    slice_positions: list[float] = list(reference_slice_positions)
+    slice_positions: list[float] = []
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
         if dataset_data.ice_shape_data is None:
@@ -814,8 +995,12 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
             trace_name = label if layer_id.startswith("zone ") else f"{label} {layer_id}"
             if "NACA0012" in case_id.upper() and roughness_filter is None:
                 trace_name = f"{trace_name} | {format_roughness_title(roughness_key)}"
-            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode="lines", name=trace_name, legendgroup=label, legendrank=participant_legend_rank(participant.participant_id), line=dict(color=color), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
+            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode=participant_trace_mode(participant.participant_id), name=trace_name, legendgroup=label, legendrank=participant_legend_rank(participant.participant_id), line=dict(color=color), marker=participant_marker(participant.participant_id, len(plot_data)), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
             trace_count += 1
+
+    add_experimental_ice_shape_traces(fig, case_id)
+    _, reference_slice_positions = add_clean_reference_trace(fig, case_id, slice_filter=slice_filter, participants=participants)
+    slice_positions.extend(reference_slice_positions)
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
     leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
@@ -927,6 +1112,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     single_description = (
         "Single-layer ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain SINGLE_LAYER. "
         "The clean reference shape is drawn from R00_REFERENCE, and submitted ice-shape files are treated as iced coordinates. "
+        "For the NACA0012 cases, the corresponding maximum, mean, and minimum experimental contours are drawn from E00_Experimental-Data. "
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
         f"Roughness condition(s): {configured_roughness_text}. "
@@ -938,6 +1124,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         "Final ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain FINAL_LAYER. "
         "Intermediate layer zones such as 1st_LAYER and 2nd_LAYER are ignored. "
         "The clean reference shape is drawn from R00_REFERENCE. "
+        "For the NACA0012 cases, the corresponding maximum, mean, and minimum experimental contours are drawn from E00_Experimental-Data. "
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
         f"Roughness condition(s): {configured_roughness_text}. "

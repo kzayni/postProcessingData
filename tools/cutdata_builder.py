@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
-from .participant_style import participant_color, participant_legend_rank
+from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
 
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
@@ -563,11 +563,12 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
                 go.Scatter(
                     x=data[x_column],
                     y=data[y_column],
-                    mode="lines",
+                    mode=participant_trace_mode(participant.participant_id),
                     name=trace_name,
                     legendgroup=trace_name,
                     legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
+                    marker=participant_marker(participant.participant_id, len(data)),
                     hovertemplate=(
                         f"Participant: {escape(trace_name)}<br>"
                         f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
@@ -636,10 +637,11 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
                 go.Scatter(
                     x=data[x_column],
                     y=data[y_column],
-                    mode="lines",
+                    mode=participant_trace_mode(participant.participant_id),
                     name=bins_id,
                     legendgroup=bins_id,
                     line=dict(color=color, dash=BIN_LINE_DASHES.get(bins_id, "solid")),
+                    marker=participant_marker(participant.participant_id, len(data)),
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
                         f"Case: {escape(case_id)}<br>"

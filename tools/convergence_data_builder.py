@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 from .gatherParticipantData import iter_case_data
-from .participant_style import participant_color, participant_legend_rank
+from .participant_style import participant_color, participant_legend_rank, participant_marker
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
     {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
@@ -392,7 +392,7 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                             legendgroup=trace_name,
                             legendrank=participant_legend_rank(participant.participant_id),
                             line=dict(color=color),
-                            marker=dict(color=color, size=9),
+                            marker=participant_marker(participant.participant_id),
                             customdata=diameter_data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                             hovertemplate=(
                                 f"Participant: {escape(label)}<br>"
@@ -432,7 +432,7 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                     legendgroup=f"{label}_{roughness_key or 'unspecified'}",
                     legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
-                    marker=dict(color=color, size=9),
+                    marker=participant_marker(participant.participant_id),
                     customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -596,7 +596,7 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
                     legendgroup=label,
                     legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
-                    marker=dict(color=color, size=9),
+                    marker=participant_marker(participant.participant_id),
                     customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -815,7 +815,7 @@ def build_distribution_icing_figure(participants, case_id: str, plot_spec: dict[
                 legendgroup=label,
                 legendrank=participant_legend_rank(participant.participant_id),
                 line=dict(color=color),
-                marker=dict(color=color, size=9),
+                marker=participant_marker(participant.participant_id),
                 customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
                 hovertemplate=(
                     f"Participant: {escape(label)}<br>"
@@ -913,7 +913,7 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                 legendgroup=label,
                 legendrank=participant_legend_rank(participant.participant_id),
                 line=dict(color=color),
-                marker=dict(color=color, size=9),
+                marker=participant_marker(participant.participant_id),
                 customdata=customdata,
                 hovertemplate=(
                     f"Participant: {escape(label)}<br>"
