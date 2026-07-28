@@ -233,6 +233,33 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 """
 
+PARTICIPANT_DETAILS_SCRIPT = """
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("[data-participant-dialog-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const dialog = document.getElementById(button.dataset.participantDialogOpen || "");
+      if (dialog) {
+        dialog.showModal();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-participant-dialog-close]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("dialog")?.close());
+  });
+
+  document.querySelectorAll(".participant-dialog").forEach((dialog) => {
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+  });
+});
+</script>
+"""
+
 SLIDESHOW_SCRIPT = """
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -469,9 +496,125 @@ def order_slideshow_cases(case_ids: list[str]) -> list[str]:
     ]
 
 
+def participant_readme_path(participant_id: str) -> Path | None:
+    """Return the README belonging to a participant ID, if one is present."""
+    prefix = f"{normalize_participant_id(participant_id)}_"
+    for participant_dir in sorted(ROOT_DIR.iterdir()):
+        readme_path = participant_dir / "README.md"
+        if participant_dir.is_dir() and participant_dir.name.startswith(prefix) and readme_path.is_file():
+            return readme_path
+    return None
+
+
+def render_inline_markdown(text: str) -> str:
+    """Render the small inline Markdown subset used by participant READMEs."""
+    rendered = html.escape(text)
+    rendered = re.sub(r"`([^`]+)`", r"<code>\1</code>", rendered)
+    rendered = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", rendered)
+    rendered = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2" target="_blank" rel="noopener">\1</a>', rendered)
+    return rendered
+
+
+def render_readme_markdown(markdown_text: str) -> str:
+    """Convert participant README Markdown to safe, readable modal HTML."""
+    lines = markdown_text.splitlines()
+    output: list[str] = []
+    paragraph: list[str] = []
+    list_type: str | None = None
+    in_code_block = False
+    code_lines: list[str] = []
+    index = 0
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            output.append(f"<p>{render_inline_markdown(' '.join(part.strip() for part in paragraph))}</p>")
+            paragraph.clear()
+
+    def close_list() -> None:
+        nonlocal list_type
+        if list_type:
+            output.append(f"</{list_type}>")
+            list_type = None
+
+    while index < len(lines):
+        line = lines[index].rstrip()
+        stripped = line.strip()
+
+        if stripped.startswith("```"):
+            flush_paragraph()
+            close_list()
+            if in_code_block:
+                output.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+                code_lines.clear()
+                in_code_block = False
+            else:
+                in_code_block = True
+            index += 1
+            continue
+
+        if in_code_block:
+            code_lines.append(line)
+            index += 1
+            continue
+
+        if stripped.startswith("|") and index + 1 < len(lines) and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[index + 1]):
+            flush_paragraph()
+            close_list()
+            table_lines = [line]
+            index += 2
+            while index < len(lines) and lines[index].strip().startswith("|"):
+                table_lines.append(lines[index])
+                index += 1
+            rows = [[cell.strip().rstrip("\\") for cell in table_line.strip().strip("|").split("|")] for table_line in table_lines]
+            header_row, *body_rows = rows
+            output.append("<div class=\"readme-table-wrapper\"><table><thead><tr>")
+            output.extend(f"<th>{render_inline_markdown(cell)}</th>" for cell in header_row)
+            output.append("</tr></thead><tbody>")
+            for row in body_rows:
+                output.append("<tr>")
+                output.extend(f"<td>{render_inline_markdown(cell)}</td>" for cell in row)
+                output.append("</tr>")
+            output.append("</tbody></table></div>")
+            continue
+
+        heading = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        if heading:
+            flush_paragraph()
+            close_list()
+            level = min(len(heading.group(1)) + 1, 6)
+            output.append(f"<h{level}>{render_inline_markdown(heading.group(2))}</h{level}>")
+        elif re.match(r"^[-*]\s+", stripped):
+            flush_paragraph()
+            if list_type != "ul":
+                close_list()
+                output.append("<ul>")
+                list_type = "ul"
+            output.append(f"<li>{render_inline_markdown(re.sub(r'^[-*]\\s+', '', stripped))}</li>")
+        elif re.match(r"^\d+[.)]\s+", stripped):
+            flush_paragraph()
+            if list_type != "ol":
+                close_list()
+                output.append("<ol>")
+                list_type = "ol"
+            output.append(f"<li>{render_inline_markdown(re.sub(r'^\\d+[.)]\\s+', '', stripped))}</li>")
+        elif not stripped:
+            flush_paragraph()
+            close_list()
+        else:
+            close_list()
+            paragraph.append(stripped)
+        index += 1
+
+    if in_code_block:
+        output.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+    flush_paragraph()
+    close_list()
+    return "\n".join(output)
+
+
 def build_participants_table(participants_metadata: list[dict[str, str]], participant_id: str | None = None) -> str:
     header_cells = ["Participant ID", "Organization", "Solver(s)", "Name(s)"]
-    header_cells_with_color = header_cells + ["Color"]
+    header_cells_with_color = header_cells + ["Color", "Information"]
     normalized_filter = normalize_participant_id(participant_id) if participant_id is not None else None
     rows = []
 
@@ -481,6 +624,7 @@ def build_participants_table(participants_metadata: list[dict[str, str]], partic
             continue
 
         color = participant_color(metadata_id)
+        readme_path = participant_readme_path(metadata_id)
 
         row_html = "<tr>"
 
@@ -493,6 +637,43 @@ def build_participants_table(participants_metadata: list[dict[str, str]], partic
                 <span>{html.escape(color)}</span>
             </td>
         """
+
+        if readme_path:
+            dialog_id = f"participant-details-{metadata_id}"
+            details_html = render_readme_markdown(readme_path.read_text(encoding="utf-8"))
+            participant_label = f"{metadata_id} — {participant.get('Organization', 'Participant')}"
+            row_html += f"""
+            <td>
+                <button class="participant-details-button" type="button"
+                        data-participant-dialog-open="{dialog_id}"
+                        aria-haspopup="dialog">
+                    View details
+                </button>
+                <dialog class="participant-dialog" id="{dialog_id}" aria-labelledby="{dialog_id}-title">
+                    <div class="participant-dialog-shell">
+                        <header class="participant-dialog-header">
+                            <div>
+                                <span class="participant-dialog-eyebrow">Participant information</span>
+                                <h2 id="{dialog_id}-title">{html.escape(participant_label)}</h2>
+                            </div>
+                            <button class="participant-dialog-close" type="button"
+                                    data-participant-dialog-close aria-label="Close participant details">×</button>
+                        </header>
+                        <div class="participant-readme">
+                            {details_html}
+                        </div>
+                    </div>
+                </dialog>
+            </td>
+            """
+        else:
+            row_html += """
+            <td>
+                <button class="participant-details-button" type="button" disabled title="No README found for this participant">
+                    No details
+                </button>
+            </td>
+            """
 
         row_html += "</tr>"
         rows.append(row_html)
@@ -837,6 +1018,7 @@ def build_page_html(title: str, body_html: str, stylesheet_href: str = "style.cs
             {body_html}
         </main>
         {VARIABLE_FILTER_SCRIPT}
+        {PARTICIPANT_DETAILS_SCRIPT}
         </body>
     </html>
     """

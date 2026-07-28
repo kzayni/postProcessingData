@@ -370,12 +370,7 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
 
 
 def empty_placeholder(title: str, message: str) -> str:
-    return f"""
-    <div class="placeholder-card">
-      <h4>{escape(title)}</h4>
-      <p>{escape(message)}</p>
-    </div>
-    """
+    return ""
 
 
 def format_slice_positions(slice_values: list[float]) -> str:
@@ -1060,12 +1055,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
                 roughness_filter_label = roughness_title
 
                 single_fig, single_trace_count, single_slice_positions = build_single_layer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id, roughness_filter=roughness_key)
-                if single_trace_count == 0:
-                    single_figure_html = empty_placeholder(
-                        title=f"Single-layer ice shape | {bin_title}",
-                        message="No matching SINGLE_LAYER iceShape zones were found yet for this case/grid level, slice, bin set, and roughness.",
-                    )
-                else:
+                if single_trace_count > 0:
                     single_filename = f"{slugify(case_id)}_{grid_level}_single_layer_ice_shape{slice_slug}{bins_slug}{roughness_slug}"
                     single_figure_html = figure_to_html_div(
                         single_fig,
@@ -1073,22 +1063,17 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
                         plot_title=f"Single-layer ice shape | {grid_level} | {bin_title}",
                     )
 
-                single_figures_html += f"""
-                <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
-                  <h5>{escape(bin_title)}</h5>
-                  <div class="plot-container">
-                    {single_figure_html}
-                  </div>
-                </section>
-                """
+                    single_figures_html += f"""
+                    <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
+                      <h5>{escape(bin_title)}</h5>
+                      <div class="plot-container">
+                        {single_figure_html}
+                      </div>
+                    </section>
+                    """
 
                 multi_fig, multi_trace_count, multi_slice_positions = build_multilayer_ice_shape_figure(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id, roughness_filter=roughness_key)
-                if multi_trace_count == 0:
-                    multi_figure_html = empty_placeholder(
-                        title=f"Multi-layer final ice shape | {bin_title}",
-                        message="No matching FINAL_LAYER iceShape zones were found yet for this case/grid level, slice, bin set, and roughness.",
-                    )
-                else:
+                if multi_trace_count > 0:
                     multi_filename = f"{slugify(case_id)}_{grid_level}_multilayer_ice_shape{slice_slug}{bins_slug}{roughness_slug}"
                     multi_figure_html = figure_to_html_div(
                         multi_fig,
@@ -1096,14 +1081,14 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
                         plot_title=f"Multi-layer final ice shape | {grid_level} | {bin_title}",
                     )
 
-                multi_figures_html += f"""
-                <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
-                  <h5>{escape(bin_title)}</h5>
-                  <div class="plot-container">
-                    {multi_figure_html}
-                  </div>
-                </section>
-                """
+                    multi_figures_html += f"""
+                    <section class="slice-plot-group" data-slice-key="{escape(slice_key)}" data-slice-label="{escape(slice_title)}" data-roughness-key="{escape(roughness_filter_key)}" data-roughness-label="{escape(roughness_filter_label)}">
+                      <h5>{escape(bin_title)}</h5>
+                      <div class="plot-container">
+                        {multi_figure_html}
+                      </div>
+                    </section>
+                    """
 
     configured_slice_text = format_slice_positions([value for value in configured_slices if value is not None])
     configured_bins_text = ", ".join(configured_bins)
@@ -1132,22 +1117,35 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         "Legend: PID or PID.DID and layer/zone index."
     )
 
+    single_section_html = ""
+    if single_figures_html:
+        single_section_html = f"""
+        <section class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
+          <h4>Single-layer ice shape</h4>
+          <p class="plot-description">{escape(single_description)}</p>
+          {single_figures_html}
+        </section>
+        """
+
+    multi_section_html = ""
+    if multi_figures_html:
+        multi_section_html = f"""
+        <section class="plot-subsection ice-shape-subsection" data-variable-key="multi_layer_final_ice_shape" data-variable-label="Multi-layer final ice shape">
+          <h4>Multi-layer final ice shape</h4>
+          <p class="plot-description">{escape(multi_description)}</p>
+          {multi_figures_html}
+        </section>
+        """
+
+    if not single_section_html and not multi_section_html:
+        return ""
+
     return f"""
     <section class="plot-filter-scope ice-shape-filter-scope">
     <h3>Ice shape</h3>
     <div class="variable-filter-controls" data-filter-title="Ice-shape variables"></div>
     <div class="variable-filter-controls ice-shape-filter-controls"></div>
-
-    <section class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
-      <h4>Single-layer ice shape</h4>
-      <p class="plot-description">{escape(single_description)}</p>
-      {single_figures_html}
-    </section>
-
-    <section class="plot-subsection ice-shape-subsection" data-variable-key="multi_layer_final_ice_shape" data-variable-label="Multi-layer final ice shape">
-      <h4>Multi-layer final ice shape</h4>
-      <p class="plot-description">{escape(multi_description)}</p>
-      {multi_figures_html}
-    </section>
+    {single_section_html}
+    {multi_section_html}
     </section>
     """

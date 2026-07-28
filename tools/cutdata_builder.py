@@ -4,6 +4,7 @@ from pathlib import Path
 from html import escape
 from dataclasses import dataclass
 from typing import Any
+import math
 import re
 
 import pandas as pd
@@ -18,7 +19,30 @@ IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
 BETA_BINS = ["BINS01", "BINS03", "BINS07", "BINS15"]
 ENABLE_COMBINED_BETA_BY_PARTICIPANT = False
 
-REFERENCE_DATA_SOURCES: list[dict[str, Any]] = []
+REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
+    {
+        "case_id": "TC_NACA0012_AE3932",
+        "plot_key": "cp_vs_x",
+        "path": Path("E00_Experimental-Data") / "EXP_NACA0012_CP.dat",
+        "x_column": "X/C",
+        "ordinate_column": "Y/C",
+        "y_columns": ["CP_1", "CP_2"],
+        "x_scale": 0.5334,
+        "rotation_degrees": 4.0,
+        "label": "Experimental Cp average",
+    },
+    {
+        "case_id": "TC_NACA0012_AE3933",
+        "plot_key": "cp_vs_x",
+        "path": Path("E00_Experimental-Data") / "EXP_NACA0012_CP.dat",
+        "x_column": "X/C",
+        "ordinate_column": "Y/C",
+        "y_columns": ["CP_1", "CP_2"],
+        "x_scale": 0.5334,
+        "rotation_degrees": 4.0,
+        "label": "Experimental Cp average",
+    },
+]
 
 CUTDATA_PLOTS: list[dict[str, Any]] = [
     {
@@ -305,12 +329,7 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
 
 
 def empty_placeholder(title: str, message: str) -> str:
-    return f"""
-    <div class="placeholder-card">
-      <h4>{escape(title)}</h4>
-      <p>{escape(message)}</p>
-    </div>
-    """
+    return ""
 
 
 def parse_ipw3_zone_name(zone_name: str) -> dict[str, str] | None:
@@ -429,7 +448,80 @@ def add_reference_traces(fig: go.Figure, case_id: str, grid_level: str, plot_key
     trace_count = 0
     sources = get_reference_sources(case_id, grid_level, plot_key)
     for source in sources:
-        print(f"Reference source configured but not loaded yet: {source}")
+        source_path = Path(source["path"])
+        if not source_path.is_file():
+            continue
+
+        columns: list[str] = []
+        rows: list[list[float]] = []
+        for raw_line in source_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.upper().startswith("VARIABLES"):
+                columns = re.findall(r'"([^"]+)"', line)
+                continue
+            if line.upper().startswith("TITLE") or not columns:
+                continue
+            values = line.replace(",", " ").split()
+            if len(values) < len(columns):
+                continue
+            try:
+                rows.append([float(value) for value in values[:len(columns)]])
+            except ValueError:
+                continue
+
+        x_column = source["x_column"]
+        ordinate_column = source.get("ordinate_column")
+        y_columns = list(source["y_columns"])
+        if (
+            not rows
+            or x_column not in columns
+            or (ordinate_column is not None and ordinate_column not in columns)
+            or any(column not in columns for column in y_columns)
+        ):
+            continue
+
+        x_index = columns.index(x_column)
+        ordinate_index = columns.index(ordinate_column) if ordinate_column is not None else None
+        y_indices = [columns.index(column) for column in y_columns]
+        x_scale = float(source.get("x_scale", 1.0))
+        rotation_angle = math.radians(float(source.get("rotation_degrees", 0.0)))
+        cosine = math.cos(rotation_angle)
+        sine = math.sin(rotation_angle)
+        x_values = [
+            x_scale * (
+                row[x_index] * cosine
+                - (row[ordinate_index] if ordinate_index is not None else 0.0) * sine
+            )
+            for row in rows
+        ]
+        y_values = [sum(row[index] for index in y_indices) / len(y_indices) for row in rows]
+        label = str(source.get("label", "Experimental"))
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=y_values,
+                mode="markers",
+                name=label,
+                legendgroup=f"reference_{plot_key}",
+                legendrank=10000,
+                marker=dict(
+                    color="#ff56be",
+                    size=8,
+                    symbol="square",
+                    line=dict(color="black", width=1.5),
+                ),
+                hovertemplate=(
+                    f"Source: {escape(source_path.name)}<br>"
+                    f"Series: average of {escape(', '.join(y_columns))}<br>"
+                    "Rotated X=%{x:.6g} m<br>"
+                    "Cp=%{y:.6g}<extra></extra>"
+                ),
+            )
+        )
+        trace_count += 1
     return trace_count
 
 
@@ -607,6 +699,8 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
     details.append(f"Slice location(s): {slices_text}.")
     if roughness_summary is not None:
         details.append(format_participant_roughness_summary(roughness_summary))
+    if plot_spec.get("plot_key") == "cp_vs_x" and case_id.startswith("TC_NACA0012_"):
+        details.append("Experimental Cp markers are the pointwise average of CP_1 and CP_2 from E00_Experimental-Data/EXP_NACA0012_CP.dat; X/C and Y/C are rotated +4° about the leading edge at (0, 0) and scaled by the 0.5334 m chord.")
     details.append("Legend: Participant ID.")
     return " ".join(details)
 
@@ -706,7 +800,7 @@ def build_combined_beta_section(participants, case_id: str, grid_level: str) -> 
             </section>
             """
     if not cards_html:
-        cards_html = empty_placeholder(title="Combined Beta", message="No matching cutData variables were found yet for this case/grid level.")
+        return ""
     return f"""
     <section class="plot-subsection combined-beta-section" data-variable-key="combined_beta" data-variable-label="Combined Beta">
       <h4>Combined Beta by participant</h4>
@@ -736,9 +830,42 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
             roughness_keys = [None]
 
         if "NACA0012" in case_id.upper():
+            if plot_spec.get("plot_key") == "htc_vs_s" and "smooth" in roughness_keys:
+                smooth_fig, smooth_trace_count, _, smooth_skipped_notes = build_cutdata_figure(
+                    participants,
+                    case_id,
+                    grid_level,
+                    plot_spec,
+                    slice_filter=slice_position,
+                    roughness_filter="smooth",
+                )
+                all_skipped_notes.extend(smooth_skipped_notes)
+                if smooth_trace_count > 0:
+                    slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
+                    smooth_title = f"{slice_title} | No roughness"
+                    slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
+                    smooth_filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}_no_roughness"
+                    smooth_figure_html = figure_to_html_div(
+                        smooth_fig,
+                        filename=smooth_filename,
+                        plot_title=f"{plot_spec['title']} | {grid_level} | {smooth_title}",
+                    )
+                    figures_html += f"""
+                    <section class="slice-plot-group">
+                      <h5>{escape(smooth_title)}</h5>
+                      <div class="plot-container">
+                        {smooth_figure_html}
+                      </div>
+                    </section>
+                    """
+                roughness_keys = [key for key in roughness_keys if key != "smooth"]
+                if not roughness_keys:
+                    continue
+
             combined_fig = None
             combined_trace_count = 0
             combined_skipped_notes: list[str] = []
+            combined_reference_groups: set[str] = set()
             for roughness_key in roughness_keys:
                 roughness_fig, roughness_trace_count, _, skipped_notes = build_cutdata_figure(
                     participants,
@@ -749,28 +876,36 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
                     roughness_filter=roughness_key,
                 )
                 combined_skipped_notes.extend(skipped_notes)
-                combined_trace_count += roughness_trace_count
                 if combined_fig is None:
                     combined_fig = go.Figure(roughness_fig)
+                    combined_reference_groups.update(
+                        str(trace.legendgroup)
+                        for trace in combined_fig.data
+                        if str(trace.legendgroup).startswith("reference_")
+                    )
                 else:
-                    combined_fig.add_traces(list(roughness_fig.data))
+                    for trace in roughness_fig.data:
+                        legend_group = str(trace.legendgroup)
+                        if legend_group.startswith("reference_"):
+                            if legend_group in combined_reference_groups:
+                                continue
+                            combined_reference_groups.add(legend_group)
+                        combined_fig.add_trace(trace)
+                combined_trace_count = len(combined_fig.data)
 
             all_skipped_notes.extend(combined_skipped_notes)
             slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
-            full_title = f"{slice_title} | All roughness heights"
+            roughness_group_title = "Roughness cases" if plot_spec.get("plot_key") == "htc_vs_s" else "All roughness heights"
+            full_title = f"{slice_title} | {roughness_group_title}"
             if combined_trace_count == 0 or combined_fig is None:
-                figure_html = empty_placeholder(
-                    title=f"{plot_spec['title']} | {full_title}",
-                    message="No matching cutData variables were found yet for this case/grid level and slice.",
-                )
-            else:
-                slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
-                filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}_all_roughness"
-                figure_html = figure_to_html_div(
-                    combined_fig,
-                    filename=filename,
-                    plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
-                )
+                continue
+            slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
+            filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}_all_roughness"
+            figure_html = figure_to_html_div(
+                combined_fig,
+                filename=filename,
+                plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
+            )
             figures_html += f"""
             <section class="slice-plot-group">
               <h5>{escape(full_title)}</h5>
@@ -798,19 +933,15 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
             full_title = f"{slice_title} | {roughness_title}"
 
             if trace_count == 0:
-                figure_html = empty_placeholder(
-                    title=f"{plot_spec['title']} | {full_title}",
-                    message="No matching cutData variables were found yet for this case/grid level, slice, and roughness.",
-                )
-            else:
-                slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
-                roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
-                filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}{roughness_slug}"
-                figure_html = figure_to_html_div(
-                    fig,
-                    filename=filename,
-                    plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
-                )
+                continue
+            slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
+            roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
+            filename = f"{slugify(case_id)}_{grid_level}_{plot_spec['filename_slug']}{slice_slug}{roughness_slug}"
+            figure_html = figure_to_html_div(
+                fig,
+                filename=filename,
+                plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
+            )
 
             figures_html += f"""
             <section class="slice-plot-group">
@@ -820,6 +951,9 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
               </div>
             </section>
             """
+
+    if not figures_html:
+        return ""
 
     roughness_summary = collect_cutdata_participant_roughness_summary(participants, case_id, grid_level, plot_spec)
     description = build_plot_description(plot_spec, [value for value in slice_positions if value is not None], case_id, roughness_summary=roughness_summary)
@@ -858,6 +992,8 @@ def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) 
             html += build_combined_beta_section(participants, case_id, grid_level)
         else:
             html += build_plot_subsection(participants, case_id, grid_level, plot_spec)
+    if not html:
+        return ""
     return f"""
     <section class="plot-filter-scope cutdata-filter-scope">
       <h3>cutData</h3>

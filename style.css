@@ -337,6 +337,7 @@ body {
   background: #f8fafc;
   font-weight: 700;
   color: #334e68;
+  text-align: center;
 }
 
 .participant-table tbody tr:nth-child(even) {
@@ -378,25 +379,7 @@ body {
   margin-top: 1.0rem;
 }
 
-.placeholder-card {
-  border: 1px dashed #9fb3c8;
-  border-radius: 12px;
-  padding: 1.0rem;
-  min-height: 120px;
-  background: white;
-  color: #52606d;
-}
-
-.placeholder-card h4 {
-  margin-top: 0;
-  color: #334e68;
-}
-
 .compact-container {
-  min-height: 180px;
-}
-
-.ice-shape-subsection .placeholder-card {
   min-height: 180px;
 }
 
@@ -466,4 +449,161 @@ body {
     margin-right: 8px;
     vertical-align: middle;
     border-radius: 2px;
+}
+
+.participant-details-button {
+    appearance: none;
+    border: 1px solid #0069a8;
+    border-radius: 999px;
+    background: #0069a8;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.48rem 0.78rem;
+    white-space: nowrap;
+}
+
+.participant-details-button:hover {
+    background: #004f80;
+    border-color: #004f80;
+}
+
+.participant-details-button:focus-visible,
+.participant-dialog-close:focus-visible {
+    outline: 3px solid rgba(0, 92, 171, 0.28);
+    outline-offset: 2px;
+}
+
+.participant-details-button:disabled {
+    background: #eef1f4;
+    border-color: #d7dde3;
+    color: #6d7780;
+    cursor: not-allowed;
+}
+
+.participant-dialog {
+    width: min(920px, calc(100vw - 2rem));
+    max-height: min(84vh, 900px);
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    box-shadow: 0 24px 70px rgba(9, 31, 51, 0.3);
+    color: #1f2933;
+}
+
+.participant-dialog::backdrop {
+    background: rgba(8, 25, 40, 0.68);
+    backdrop-filter: blur(3px);
+}
+
+.participant-dialog-shell {
+    display: flex;
+    flex-direction: column;
+    max-height: min(84vh, 900px);
+}
+
+.participant-dialog-header {
+    align-items: flex-start;
+    background: #f5f8fb;
+    border-bottom: 1px solid #d9e2ec;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 1.1rem 1.3rem;
+}
+
+.participant-dialog-header h2 {
+    margin: 0.15rem 0 0;
+}
+
+.participant-dialog-eyebrow {
+    color: #52606d;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.participant-dialog-close {
+    align-items: center;
+    appearance: none;
+    background: #fff;
+    border: 1px solid #d9e2ec;
+    border-radius: 50%;
+    color: #1f2933;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 2.25rem;
+    font: inherit;
+    font-size: 1.5rem;
+    height: 2.25rem;
+    justify-content: center;
+    line-height: 1;
+}
+
+.participant-readme {
+    overflow: auto;
+    padding: 0.5rem 1.4rem 1.6rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+.participant-readme h2,
+.participant-readme h3,
+.participant-readme h4,
+.participant-readme h5,
+.participant-readme h6 {
+    margin: 1.35rem 0 0.55rem;
+}
+
+.participant-readme p,
+.participant-readme li {
+    line-height: 1.62;
+}
+
+.participant-readme pre {
+    background: #f4f6f8;
+    border: 1px solid #d9e2ec;
+    border-radius: 8px;
+    overflow: auto;
+    padding: 0.9rem;
+    white-space: pre-wrap;
+}
+
+.participant-readme code {
+    font-size: 0.9em;
+}
+
+.readme-table-wrapper {
+    margin: 0.9rem 0;
+    overflow-x: auto;
+}
+
+.participant-readme table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.participant-readme th,
+.participant-readme td {
+    border: 1px solid #d9e2ec;
+    padding: 0.55rem 0.65rem;
+    text-align: left;
+}
+
+.participant-readme th {
+    background: #edf3f8;
+}
+
+@media (max-width: 640px) {
+    .participant-dialog-header {
+        padding: 0.9rem 1rem;
+    }
+
+    .participant-readme {
+        padding: 0.35rem 1rem 1.2rem;
+    }
 }
