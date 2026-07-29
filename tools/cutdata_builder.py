@@ -412,11 +412,22 @@ def iter_grid_data(participants, case_id: str, grid_level: str):
     yield from iter_grid_datasets(participants, case_id, grid_level)
 
 
+def cut_data_for_plot(dataset_data, plot_spec: dict[str, Any] | None = None):
+    """Select participant 015's corrected Cp/Beta coordinates when applicable."""
+    plot_key = (plot_spec or {}).get("plot_key", "")
+    if (
+        plot_key == "cp_vs_x" or plot_key.startswith("beta_")
+    ) and getattr(dataset_data, "cp_beta_cut_data", None) is not None:
+        return dataset_data.cp_beta_cut_data
+    return dataset_data.cut_data
+
+
 def get_cutdata_zones_by_bins(dataset_data) -> dict[str, list[tuple[str, Any, float | None]]]:
     grouped: dict[str, list[tuple[str, Any, float | None]]] = {bins_id: [] for bins_id in BETA_BINS}
-    if dataset_data.cut_data is None:
+    cut_data = cut_data_for_plot(dataset_data, {"plot_key": "beta_cards_vs_s"})
+    if cut_data is None:
         return grouped
-    for zone_name, zone in dataset_data.cut_data.zones.items():
+    for zone_name, zone in cut_data.zones.items():
         zone_info = parse_ipw3_zone_name(zone_name)
         if zone_info is None:
             continue
@@ -580,12 +591,13 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
     )
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
-        if dataset_data.cut_data is None:
+        cut_data = cut_data_for_plot(dataset_data, plot_spec)
+        if cut_data is None:
             continue
         # For fields shared by all bin solutions (everything except Beta),
         # numeric bin ordering plus the bin-independent trace key below keeps
         # the first available solution for each slice and ks condition.
-        zone_items = sorted(dataset_data.cut_data.zones.items(), key=cutdata_zone_sort_key)
+        zone_items = sorted(cut_data.zones.items(), key=cutdata_zone_sort_key)
         for zone_name, zone in zone_items:
             zone_info = parse_ipw3_zone_name(zone_name)
             bins_id = zone_info["bins"] if zone_info is not None else None
@@ -1016,10 +1028,11 @@ def collect_cutdata_participant_roughness_summary(participants, case_id: str, gr
     bins_filter = plot_spec.get("bins_filter")
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
-        if dataset_data.cut_data is None:
+        cut_data = cut_data_for_plot(dataset_data, plot_spec)
+        if cut_data is None:
             continue
 
-        for zone_name, zone in dataset_data.cut_data.zones.items():
+        for zone_name, zone in cut_data.zones.items():
             zone_info = parse_ipw3_zone_name(zone_name)
             bins_id = zone_info["bins"] if zone_info is not None else None
             if bins_filter is not None and bins_id != bins_filter:
@@ -1054,10 +1067,11 @@ def collect_cutdata_roughness_keys(participants, case_id: str, grid_level: str, 
     bins_filter = plot_spec.get("bins_filter")
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
-        if dataset_data.cut_data is None:
+        cut_data = cut_data_for_plot(dataset_data, plot_spec)
+        if cut_data is None:
             continue
 
-        for zone_name, zone in dataset_data.cut_data.zones.items():
+        for zone_name, zone in cut_data.zones.items():
             zone_info = parse_ipw3_zone_name(zone_name)
             bins_id = zone_info["bins"] if zone_info is not None else None
 

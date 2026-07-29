@@ -189,8 +189,10 @@ class DatasetData:
     dataset_id: str
     path: Path
     cut_data_file: Optional[Path] = None
+    cp_beta_cut_data_file: Optional[Path] = None
     ice_shape_file: Optional[Path] = None
     cut_data: Optional[TecplotData] = None
+    cp_beta_cut_data: Optional[TecplotData] = None
     ice_shape_data: Optional[TecplotData] = None
     other_files: list[Path] = field(default_factory=list)
 
@@ -198,6 +200,9 @@ class DatasetData:
         """Read available cutData and iceShape files for this dataset/attempt."""
         if self.cut_data_file is not None:
             self.cut_data = read_tecplot_dat(self.cut_data_file, case_id=case_id, highlight_points_by_case=highlight_points_by_case, clean_s_cache=clean_s_cache)
+
+        if self.cp_beta_cut_data_file is not None:
+            self.cp_beta_cut_data = read_tecplot_dat(self.cp_beta_cut_data_file, case_id=case_id, highlight_points_by_case=highlight_points_by_case, clean_s_cache=clean_s_cache)
 
         if self.ice_shape_file is not None:
             ice_shape_path = rotated_ice_shape_path_for_plotting(
@@ -1564,7 +1569,16 @@ def attach_file_to_participant(participant: Participant, file_path: Path, defaul
         grid_data = case_data.get_or_create_grid_level(grid_level)
         dataset_data = grid_data.get_or_create_dataset(dataset_id, path=file_path.parent)
 
-        if file_type == "cutData":
+        # Participant 015 supplied Cp/Beta again on their correct coordinate
+        # surface. Keep that file beside the regular cutData submission so the
+        # plotting layer can use it only for Cp and Beta.
+        if (
+            file_type == "cutData"
+            and participant.participant_id == "015"
+            and re.search(r"_cutData_Cp_Beta_", file_path.name, re.IGNORECASE)
+        ):
+            dataset_data.cp_beta_cut_data_file = file_path
+        elif file_type == "cutData":
             dataset_data.cut_data_file = file_path
         elif file_type == "iceShape":
             dataset_data.ice_shape_file = file_path
