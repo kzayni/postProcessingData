@@ -1035,6 +1035,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--slides", action="store_true", help="Build index.html as a one-plot-per-slide presentation with sidebar and previous/next controls.")
     parser.add_argument("--png", action="store_true", help="Export every generated plot as a PNG instead of building HTML pages.")
     parser.add_argument("--lower-res", action="store_true", help="Export PNGs at 1350x900 instead of the default 4050x2700. Used with --png.")
+    parser.add_argument("--no-exp", action="store_true", help="Exclude experimental results from every generated plot.")
     return parser.parse_args()
 
 
@@ -1097,6 +1098,8 @@ def write_case_pages(participants, case_ids: list[str]) -> None:
 def main() -> None:
     args = parse_args()
     configure_output_paths(args.participant_id)
+    cutdata_builder.set_include_experimental_data(not args.no_exp)
+    iceshape_builder.set_include_experimental_data(not args.no_exp)
 
     # Per-case highlight point coordinates are (X, Y, Z). Use None for a
     # coordinate that should be taken from each cutData slice, usually Y.

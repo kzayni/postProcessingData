@@ -83,6 +83,7 @@ EXPERIMENTAL_ICE_SHAPE_FILES = {
     "TC_NACA0012_AE3932": Path("E00_Experimental-Data") / "EXP_AE3932.dat",
     "TC_NACA0012_AE3933": Path("E00_Experimental-Data") / "EXP_AE3933.dat",
 }
+INCLUDE_EXPERIMENTAL_DATA = True
 
 INCHES_TO_METRES = 0.0254
 
@@ -323,6 +324,11 @@ def plotly_config(filename: str) -> dict[str, Any]:
 DEFER_PLOTLY_DIR: Path | None = None
 PNG_EXPORT_DIR: Path | None = None
 PNG_EXPORT_QUEUE: list[tuple[go.Figure, Path]] = []
+
+
+def set_include_experimental_data(include: bool) -> None:
+    global INCLUDE_EXPERIMENTAL_DATA
+    INCLUDE_EXPERIMENTAL_DATA = include
 
 
 def set_defer_plotly_html(output_dir: Path | None) -> None:
@@ -730,6 +736,9 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
     ice shapes as X/Z in metres, so the experimental Y coordinate is converted
     to the plotted Z coordinate here.
     """
+    if not INCLUDE_EXPERIMENTAL_DATA:
+        return 0
+
     experimental_path = EXPERIMENTAL_ICE_SHAPE_FILES.get(case_id)
     if experimental_path is None or not experimental_path.exists():
         return 0
@@ -1094,10 +1103,15 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     configured_bins_text = ", ".join(configured_bins)
     configured_roughness_text = ", ".join(format_roughness_title(value) for value in configured_roughness)
     participant_roughness_text = format_participant_roughness_summary(collect_ice_shape_participant_roughness_summary(participants, case_id, grid_level))
+    experimental_description = (
+        "For the NACA0012 cases, the corresponding maximum, mean, and minimum experimental contours are drawn from E00_Experimental-Data. "
+        if INCLUDE_EXPERIMENTAL_DATA
+        else ""
+    )
     single_description = (
         "Single-layer ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain SINGLE_LAYER. "
         "The clean reference shape is drawn from R00_REFERENCE, and submitted ice-shape files are treated as iced coordinates. "
-        "For the NACA0012 cases, the corresponding maximum, mean, and minimum experimental contours are drawn from E00_Experimental-Data. "
+        f"{experimental_description}"
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
         f"Roughness condition(s): {configured_roughness_text}. "
@@ -1109,7 +1123,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         "Final ice-shape comparison extracted from finalIceShape / iceShape zones whose names contain FINAL_LAYER. "
         "Intermediate layer zones such as 1st_LAYER and 2nd_LAYER are ignored. "
         "The clean reference shape is drawn from R00_REFERENCE. "
-        "For the NACA0012 cases, the corresponding maximum, mean, and minimum experimental contours are drawn from E00_Experimental-Data. "
+        f"{experimental_description}"
         f"Slice location(s): {configured_slice_text}. "
         f"Bin set(s): {configured_bins_text}. "
         f"Roughness condition(s): {configured_roughness_text}. "

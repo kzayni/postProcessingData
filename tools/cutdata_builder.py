@@ -18,6 +18,7 @@ SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
 BETA_BINS = ["BINS01", "BINS03", "BINS07", "BINS15"]
 ENABLE_COMBINED_BETA_BY_PARTICIPANT = False
+INCLUDE_EXPERIMENTAL_DATA = True
 
 REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
     {
@@ -43,6 +44,11 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
         "label": "Experimental Cp average",
     },
 ]
+
+
+def set_include_experimental_data(include: bool) -> None:
+    global INCLUDE_EXPERIMENTAL_DATA
+    INCLUDE_EXPERIMENTAL_DATA = include
 
 CUTDATA_PLOTS: list[dict[str, Any]] = [
     {
@@ -445,6 +451,9 @@ def get_reference_sources(case_id: str, grid_level: str, plot_key: str) -> list[
 
 
 def add_reference_traces(fig: go.Figure, case_id: str, grid_level: str, plot_key: str) -> int:
+    if not INCLUDE_EXPERIMENTAL_DATA:
+        return 0
+
     trace_count = 0
     sources = get_reference_sources(case_id, grid_level, plot_key)
     for source in sources:
@@ -699,7 +708,7 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
     details.append(f"Slice location(s): {slices_text}.")
     if roughness_summary is not None:
         details.append(format_participant_roughness_summary(roughness_summary))
-    if plot_spec.get("plot_key") == "cp_vs_x" and case_id.startswith("TC_NACA0012_"):
+    if INCLUDE_EXPERIMENTAL_DATA and plot_spec.get("plot_key") == "cp_vs_x" and case_id.startswith("TC_NACA0012_"):
         details.append("Experimental Cp markers are the pointwise average of CP_1 and CP_2 from E00_Experimental-Data/EXP_NACA0012_CP.dat; X/C and Y/C are rotated +4° about the leading edge at (0, 0) and scaled by the 0.5334 m chord.")
     details.append("Legend: Participant ID.")
     return " ".join(details)
