@@ -93,6 +93,7 @@ INCHES_TO_METRES = 0.0254
 #   "MAXCCS", "MEANCCS", and "MINCCS"
 # Each case's styles are shared by the single-layer and final-layer plots.
 # Common Plotly values:
+#   show_contour  = True to show this CCS or False to hide it completely
 #   show_markers  = True to show markers or False for no markers
 #   line_color    = any CSS color name or hex color
 #   marker_color  = any CSS color name or hex color (independent of line_color)
@@ -102,6 +103,7 @@ INCHES_TO_METRES = 0.0254
 EXPERIMENTAL_ICE_SHAPE_STYLES = {
     "TC_NACA0012_AE3932": {
         "MAXCCS": {
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -112,6 +114,7 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
             "marker_frequency": 50,
         },
         "MEANCCS": {
+            "show_contour": True,
             "show_markers": False,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -122,6 +125,7 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
             "marker_frequency": 1,
         },
         "MINCCS": {
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -134,6 +138,7 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
     },
     "TC_NACA0012_AE3933": {
         "MAXCCS": {
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -144,6 +149,7 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
             "marker_frequency": 50,
         },
         "MEANCCS": {
+            "show_contour": True,
             "show_markers": False,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -154,6 +160,7 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
             "marker_frequency": 1,
         },
         "MINCCS": {
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -212,7 +219,9 @@ def valid_submitted_ice_shape_rows(dataframe: pd.DataFrame, x_column: str, z_col
     """
     x_values = pd.to_numeric(dataframe[x_column], errors="coerce")
     z_values = pd.to_numeric(dataframe[z_column], errors="coerce")
-    valid_mask = x_values.notna() & z_values.notna() & (x_values > -998.0) & (z_values > -998.0)
+    segment_separator = x_values.isna() & z_values.isna()
+    valid_coordinates = x_values.notna() & z_values.notna() & (x_values > -998.0) & (z_values > -998.0)
+    valid_mask = valid_coordinates | segment_separator
 
     y_column = find_column_case_insensitive(
         dataframe.columns,
@@ -475,6 +484,9 @@ def iter_grid_data(participants, case_id: str, grid_level: str):
 
 def parse_ipw3_ice_shape_zone_name(zone_name: str) -> dict[str, str] | None:
     zone_name = zone_name.strip()
+    # Some Tecplot submissions include the zone topology in the title. It is
+    # metadata, not part of the IPW3 slice naming convention.
+    zone_name = re.sub(r"^FELINESEG_", "", zone_name, flags=re.IGNORECASE)
     slice_pattern = re.compile(r"^SLICE_Y_(?P<slice>.+?)(?:_(?P<bins>BINS\d+))?(?:_(?P<tail>.*))?$", re.IGNORECASE)
     mccs_pattern = re.compile(r"^MCCS(?:_(?P<bins>BINS\d+))?(?:_(?P<tail>.*))?$", re.IGNORECASE)
 
@@ -764,9 +776,12 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
             .get(case_id, {})
             .get(
                 normalized_zone_name,
-                {"show_markers": True, "line_color": "#d62728", "marker_color": "#d62728", "line_width": 2, "line_dash": "solid", "marker_size": 5, "marker_symbol": "circle", "marker_frequency": 1},
+                {"show_contour": True, "show_markers": True, "line_color": "#d62728", "marker_color": "#d62728", "line_width": 2, "line_dash": "solid", "marker_size": 5, "marker_symbol": "circle", "marker_frequency": 1},
             )
         )
+        if not style.get("show_contour", True):
+            continue
+
         marker_frequency = max(1, int(style["marker_frequency"]))
         marker_sizes = [
             style["marker_size"] if point_index % marker_frequency == 0 else 0

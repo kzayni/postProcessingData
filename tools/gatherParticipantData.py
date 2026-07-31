@@ -444,6 +444,42 @@ def try_parse_numeric_row(line: str) -> Optional[list[float]]:
 
 
 OPTIONAL_TRAILING_TECPLOT_VARIABLES = {"k", "rhoice", "htc_clean"}
+FELINESEG_EXPANDED_AUXDATA = "FELINESEG_CONNECTIVITY_EXPANDED"
+
+
+def tecplot_header_contains(path: Path, text: str, limit: int = 65536) -> bool:
+    """Search the header-sized prefix of a Tecplot file case-insensitively."""
+    with path.open("r", encoding="utf-8", errors="ignore") as file:
+        prefix = file.read(limit)
+    return text.replace(" ", "").upper() in prefix.replace(" ", "").upper()
+
+
+def expand_felineseg_connectivity(
+    node_rows: list[list[float]],
+    connectivity_rows: list[list[float]],
+    n_variables: int,
+) -> list[list[float]]:
+    """Convert FELINESEG connectivity into Plotly-safe point segments.
+
+    FELINESEG node rows are not required to be stored in contour order. Each
+    connectivity row contains the one-based node indices for a line element,
+    so emit both endpoints followed by a NaN separator. This draws the exact
+    submitted elements without adding false lines between unrelated elements.
+    """
+    expanded_rows: list[list[float]] = []
+    separator = [float("nan")] * n_variables
+
+    for connection in connectivity_rows:
+        if len(connection) != 2 or not all(float(value).is_integer() for value in connection):
+            continue
+
+        start_index, end_index = (int(value) - 1 for value in connection)
+        if not (0 <= start_index < len(node_rows) and 0 <= end_index < len(node_rows)):
+            continue
+
+        expanded_rows.extend((node_rows[start_index], node_rows[end_index], separator.copy()))
+
+    return expanded_rows or node_rows
 
 
 def read_tecplot_dat(path: Path, case_id: str | None = None, highlight_points_by_case: HighlightPointsByCase | None = None, clean_s_cache: bool = False, process_cutdata: bool = True) -> TecplotData:
@@ -474,10 +510,13 @@ def read_tecplot_dat(path: Path, case_id: str | None = None, highlight_points_by
 
         n_variables = len(result.variables)
         valid_rows: list[list[float]] = []
+        connectivity_rows: list[list[float]] = []
 
         for row in current_zone_rows:
             if len(row) == n_variables:
                 valid_rows.append(row)
+            elif "FELINESEG" in current_zone_name.upper() and len(row) == 2:
+                connectivity_rows.append(row)
             elif len(row) < n_variables and all(
                 variable.strip().lower() in OPTIONAL_TRAILING_TECPLOT_VARIABLES
                 for variable in result.variables[len(row):]
@@ -489,6 +528,10 @@ def read_tecplot_dat(path: Path, case_id: str | None = None, highlight_points_by
                 valid_rows.append(row + [-999.0] * (n_variables - len(row)))
             else:
                 print(f"Warning: skipped row in {path.name}, zone {current_zone_name}: expected {n_variables} values, got {len(row)}")
+
+        if connectivity_rows:
+            valid_rows = expand_felineseg_connectivity(valid_rows, connectivity_rows, n_variables)
+            result.auxdata[FELINESEG_EXPANDED_AUXDATA] = "1"
 
         dataframe = pd.DataFrame(valid_rows, columns=result.variables)
         result.zones[current_zone_name] = ZoneData(name=current_zone_name, data=dataframe, auxdata=current_zone_auxdata.copy())
@@ -858,7 +901,11 @@ def rotated_ice_shape_path_for_plotting(path: Path, case_id: str | None, clean_c
 
     output_path = rotated_ice_shape_path(path)
     if not clean_cache and output_path.exists() and output_path.stat().st_mtime >= path.stat().st_mtime:
-        return output_path
+        # FELINESEG sidecars created by older versions lost element
+        # connectivity. Rebuild those once; current sidecars carry this marker.
+        source_uses_felineseg = tecplot_header_contains(path, "ZONETYPE=FELINESEG")
+        if not source_uses_felineseg or tecplot_header_contains(output_path, FELINESEG_EXPANDED_AUXDATA):
+            return output_path
 
     data = read_tecplot_dat(path, process_cutdata=False)
     rotate_naca0012_ice_shape(data)

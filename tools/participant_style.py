@@ -14,6 +14,12 @@ PARTICIPANTS = [
         "Name(s)": "Ariane Vieira",
     },
     {
+        "Participant ID": "003",
+        "Organization": "NRC",
+        "Solver(s)": "MORPHOGENETIC",
+        "Name(s)": "Pete Forsyth",
+    },
+    {
         "Participant ID": "004",
         "Organization": "ONERA",
         "Solver(s)": "CEDRE / IGLOO3D",
@@ -76,24 +82,26 @@ PARTICIPANTS = [
 ]
 
 PARTICIPANT_COLORS = {
-    "001": "#00FF40",
-    "002": "#00BDDB",
-    "004": "#4d7502",
-    "006": "#4f0077",
+    "001": "#2ca02c",
+    "002": "#17becf",
+    "003": "#8c564b",
+    "004": "#bcbd22",
+    "006": "#9467bd",
     "007": "#1f77b4",
-    "008": "#ff0000",
-    "009": "#ad1d03",
-    "010": "#a3af00",
-    "014": "#aa00ff",
-    "015": "#ff0080",
-    "019": "#e39000",
-    "020": "#573700",
+    "008": "#d62728",
+    "009": "#ff7f0e",
+    "010": "#7f7f7f",
+    "014": "#e377c2",
+    "015": "#393b79",
+    "019": "#637939",
+    "020": "#843c39",
 }
 
 # Set each participant to True or False to show or hide its markers.
 PARTICIPANTS_MARKERS = {
     "001": False,
     "002": False,
+    "003": False,
     "004": False,
     "006": False,
     "007": False,
@@ -111,6 +119,7 @@ PARTICIPANTS_MARKERS = {
 PARTICIPANT_MARKER_SHAPES = {
     "001": "circle",
     "002": "circle",
+    "003": "circle",
     "004": "circle",
     "006": "circle",
     "007": "circle",
@@ -128,6 +137,7 @@ PARTICIPANT_MARKER_SHAPES = {
 PARTICIPANT_MARKER_SIZES = {
     "001": 9,
     "002": 9,
+    "003": 9,
     "004": 9,
     "006": 9,
     "007": 9,
@@ -145,6 +155,7 @@ PARTICIPANT_MARKER_SIZES = {
 PARTICIPANT_MARKER_FREQUENCIES = {
     "001": 1,
     "002": 1,
+    "003": 1,
     "004": 1,
     "006": 1,
     "007": 1,

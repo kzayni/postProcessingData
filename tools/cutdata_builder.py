@@ -74,7 +74,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "y_label": "Convective Heat Transfer [W/m2K]",
         "filename_slug": "htc_vs_s",
         "bins_filter": None,
-        "y_range": [0, 1600],
+        "y_range": [0, 2000],
     },
     {
         "plot_key": "beta_bins01_vs_s",
