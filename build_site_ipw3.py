@@ -260,6 +260,81 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 """
 
+SITE_SIDEBAR_SCRIPT = """
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const sidebar = document.querySelector("[data-site-sidebar]");
+  const hideButton = document.querySelector("[data-site-sidebar-hide]");
+  const showButton = document.querySelector("[data-site-sidebar-show]");
+  if (!sidebar || !hideButton || !showButton) return;
+
+  const setHidden = (hidden) => {
+    document.body.classList.toggle("site-sidebar-hidden", hidden);
+    showButton.hidden = !hidden;
+    try { localStorage.setItem("ipw3-sidebar-hidden", hidden ? "1" : "0"); } catch (_) {}
+  };
+  let initiallyHidden = false;
+  try { initiallyHidden = localStorage.getItem("ipw3-sidebar-hidden") === "1"; } catch (_) {}
+  setHidden(initiallyHidden);
+  hideButton.addEventListener("click", () => setHidden(true));
+  showButton.addEventListener("click", () => setHidden(false));
+});
+</script>
+"""
+
+PLOT_DOWNLOAD_SCRIPT = """
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("[data-plot-download]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const shell = button.closest(".plot-download-shell");
+      const graph = shell?.querySelector(".plotly-graph-div");
+      if (!shell || !graph || !window.Plotly) return;
+
+      const withLegend = button.dataset.plotDownload === "with-legend";
+      const original = {
+        showlegend: graph.layout.showlegend,
+        titleText: graph.layout.title?.text || "",
+        titleX: graph.layout.title?.x,
+        marginRight: graph.layout.margin?.r,
+        marginTop: graph.layout.margin?.t,
+      };
+      const filename = shell.dataset.plotFilename || "plot";
+      const title = shell.dataset.plotTitle || "";
+      button.disabled = true;
+
+      try {
+        await Plotly.relayout(graph, {
+          showlegend: withLegend,
+          "title.text": title,
+          "title.x": 0.5,
+          "title.xanchor": "center",
+          "margin.t": 100,
+          "margin.r": withLegend ? 260 : 60,
+        });
+        await Plotly.downloadImage(graph, {
+          format: "png",
+          filename: `${filename}_${withLegend ? "with_legend" : "without_legend"}`,
+          width: 1350,
+          height: 900,
+          scale: 3,
+        });
+      } finally {
+        await Plotly.relayout(graph, {
+          showlegend: original.showlegend,
+          "title.text": original.titleText,
+          "title.x": original.titleX,
+          "margin.r": original.marginRight,
+          "margin.t": original.marginTop,
+        });
+        button.disabled = false;
+      }
+    });
+  });
+});
+</script>
+"""
+
 SLIDESHOW_SCRIPT = """
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -638,7 +713,8 @@ def build_participants_table(participants_metadata: list[dict[str, str]], partic
             </td>
         """
 
-        if readme_path:
+        show_information = participant.get("Show Information on Index", True)
+        if show_information and readme_path:
             dialog_id = f"participant-details-{metadata_id}"
             details_html = render_readme_markdown(readme_path.read_text(encoding="utf-8"))
             participant_label = f"{metadata_id} — {participant.get('Organization', 'Participant')}"
@@ -669,7 +745,7 @@ def build_participants_table(participants_metadata: list[dict[str, str]], partic
         else:
             row_html += """
             <td>
-                <button class="participant-details-button" type="button" disabled title="No README found for this participant">
+                <button class="participant-details-button" type="button" disabled title="No participant details available">
                     No details
                 </button>
             </td>
@@ -792,8 +868,63 @@ def convergence_page_path(case_id: str) -> Path:
     return PAGES_DIR / f"{slugify(case_id)}_grid_convergence.html"
 
 
+def geometry_page_path(geometry_id: str) -> Path:
+    return PAGES_DIR / f"{slugify(geometry_id)}.html"
+
+
+def cfd_convergence_page_path(geometry_id: str) -> Path:
+    return PAGES_DIR / f"{slugify(geometry_id)}_cfd_grid_convergence.html"
+
+
+def icing_convergence_page_path(case_id: str) -> Path:
+    return PAGES_DIR / f"{slugify(case_id)}_icing_grid_convergence.html"
+
+
+def category_page_path(category: str) -> Path:
+    return PAGES_DIR / f"{slugify(category)}.html"
+
+
+def optional_cfd_convergence_page_path(geometry_id: str) -> Path:
+    return PAGES_DIR / f"{slugify(geometry_id)}_optional_cfd_grid_convergence.html"
+
+
+def optional_icing_convergence_page_path(case_id: str) -> Path:
+    return PAGES_DIR / f"{slugify(case_id)}_optional_icing_grid_convergence.html"
+
+
+def icing_metric_page_path(case_id: str, metric: str, optional: bool = False) -> Path:
+    optional_slug = "optional_" if optional else ""
+    return PAGES_DIR / f"{slugify(case_id)}_{optional_slug}icing_{slugify(metric)}_grid_convergence.html"
+
+
+def geometry_for_case(case_id: str) -> str:
+    return "NACA0012" if "NACA0012" in case_id.upper() else "ONERA M6"
+
+
+def cases_by_geometry(case_ids: list[str]) -> dict[str, list[str]]:
+    grouped = {"NACA0012": [], "ONERA M6": []}
+    for case_id in case_ids:
+        grouped.setdefault(geometry_for_case(case_id), []).append(case_id)
+    return {geometry: cases for geometry, cases in grouped.items() if cases}
+
+
+def shared_cfd_case_id(geometry_id: str, case_ids: list[str]) -> str:
+    matching = cases_by_geometry(case_ids).get(geometry_id, [])
+    if not matching:
+        raise ValueError(f"No cases available for {geometry_id}")
+    return matching[0]
+
+
 def grid_page_path(case_id: str, grid_level: str) -> Path:
     return PAGES_DIR / f"{slugify(case_id)}_{grid_level.lower()}.html"
+
+
+def cutdata_page_path(case_id: str, grid_level: str) -> Path:
+    return PAGES_DIR / f"{slugify(case_id)}_{grid_level.lower()}_cutdata.html"
+
+
+def ice_shape_page_path(case_id: str, grid_level: str) -> Path:
+    return PAGES_DIR / f"{slugify(case_id)}_{grid_level.lower()}_ice_shape.html"
 
 
 def link_from_root(path: Path) -> str:
@@ -826,46 +957,176 @@ def build_nav_chip(label: str, href: str, active: bool = False) -> str:
     return f'<a class="nav-chip{active_class}" href="{escape(href)}">{escape(label)}</a>'
 
 
-def build_page_navigation(case_ids: list[str], current_case_id: str | None = None, current_view: str | None = None) -> str:
-    case_links = [build_nav_chip("Index", "../index.html" if current_case_id is not None else "index.html", active=current_case_id is None)]
+def build_page_navigation(case_ids: list[str], current_case_id: str | None = None, current_view: str | None = None, current_geometry: str | None = None) -> str:
+    on_subpage = current_case_id is not None or current_geometry is not None or current_view is not None
+    def page_href(path: Path) -> str:
+        return link_from_pages(path) if on_subpage else link_from_root(path)
 
+    def sidebar_link(label: str, path: Path, active: bool = False) -> str:
+        return f'<a class="sidebar-link{" active" if active else ""}" href="{escape(page_href(path))}">{escape(label)}</a>'
+
+    geometry_links = lambda path_builder, view: "".join(
+        sidebar_link(geometry_id, path_builder(geometry_id), current_view == view and current_geometry == geometry_id)
+        for geometry_id in cases_by_geometry(case_ids)
+    )
+    case_links = lambda path_builder, view: "".join(
+        sidebar_link(display_case_name(case_id), path_builder(case_id), current_view == view and current_case_id == case_id)
+        for case_id in case_ids
+    )
+    def icing_sidebar_links(optional: bool) -> str:
+        links = ""
+        view_prefix = "optional_icing" if optional else "icing"
+        for case_id in case_ids:
+            case_open = current_case_id == case_id and isinstance(current_view, str) and current_view.startswith(view_prefix + "_")
+            metric_links = "".join(
+                sidebar_link(
+                    label,
+                    icing_metric_page_path(case_id, metric, optional=optional),
+                    current_case_id == case_id and current_view == f"{view_prefix}_{metric}",
+                )
+                for metric, label in (("water", "Water mass"), ("ice", "Ice mass"), ("evaporation", "Water evaporation"))
+            )
+            links += f"""
+            <details class="sidebar-case-group" {'open' if case_open else ''}>
+              <summary>{escape(display_case_name(case_id))}</summary>
+              <div class="sidebar-case-levels">{metric_links}</div>
+            </details>
+            """
+        return links
+    grid_links = ""
     for case_id in case_ids:
-        href = link_from_pages(case_page_path(case_id)) if current_case_id is not None else link_from_root(case_page_path(case_id))
-        case_links.append(build_nav_chip(case_id, href, active=current_case_id == case_id and current_view == "case"))
-
-    level_links = ""
-    if current_case_id is not None:
-        items = [build_nav_chip("Grid convergence", link_from_pages(convergence_page_path(current_case_id)), active=current_view == "grid_convergence")]
+        levels = ""
         for grid_level in sorted(VALID_GRID_LEVELS):
-            items.append(build_nav_chip(grid_level, link_from_pages(grid_page_path(current_case_id, grid_level)), active=current_view == grid_level))
-        level_links = f"""
-        <div class="top-nav-row">
-          <span class="top-nav-label">Views</span>
-          {''.join(items)}
-        </div>
+            level_is_open = current_case_id == case_id and current_view in {f"{grid_level}_cutdata", f"{grid_level}_ice_shape"}
+            levels += f"""
+            <details class="sidebar-grid-group" {'open' if level_is_open else ''}>
+              <summary>{escape(grid_level)}</summary>
+              {sidebar_link('Cut-Data', cutdata_page_path(case_id, grid_level), current_case_id == case_id and current_view == f'{grid_level}_cutdata')}
+              {sidebar_link('Ice-Shape', ice_shape_page_path(case_id, grid_level), current_case_id == case_id and current_view == f'{grid_level}_ice_shape')}
+            </details>
+            """
+        case_is_open = current_case_id == case_id and isinstance(current_view, str) and any(current_view.startswith(f"{level}_") for level in VALID_GRID_LEVELS)
+        grid_links += f"""
+        <details class="sidebar-case-group" {'open' if case_is_open else ''}>
+          <summary>{escape(display_case_name(case_id))}</summary>
+          <div class="sidebar-case-levels">{levels}</div>
+        </details>
+        """
+
+    groups = [
+        ("CFD grid convergence", "cfd_grid_convergence", geometry_links(cfd_convergence_page_path, "cfd_grid_convergence")),
+        ("Icing grid convergence", "icing_grid_convergence", icing_sidebar_links(False)),
+        ("Optional CFD grid convergence", "optional_cfd_grid_convergence", geometry_links(optional_cfd_convergence_page_path, "optional_cfd_grid_convergence")),
+        ("Optional icing grid convergence", "optional_icing_grid_convergence", icing_sidebar_links(True)),
+        ("Grid-level plots", "grid_level_plots", grid_links),
+    ]
+    group_html = ""
+    for label, category, links in groups:
+        is_grid_view = isinstance(current_view, str) and any(current_view.startswith(f"{level}_") for level in VALID_GRID_LEVELS)
+        icing_child = isinstance(current_view, str) and (
+            (category == "icing_grid_convergence" and current_view.startswith("icing_"))
+            or (category == "optional_icing_grid_convergence" and current_view.startswith("optional_icing_"))
+        )
+        is_open = current_view == category or icing_child or (category == "grid_level_plots" and is_grid_view)
+        group_html += f"""
+        <details class="sidebar-section" {'open' if is_open else ''}>
+          <summary>{escape(label)}</summary>
+          <a class="sidebar-overview" href="{escape(page_href(category_page_path(category)))}">Overview</a>
+          <div class="sidebar-links">{links}</div>
+        </details>
         """
 
     return f"""
-    <nav class="top-nav" aria-label="Page navigation">
-      <div class="top-nav-row">
-        <span class="top-nav-label">Cases</span>
-        {''.join(case_links)}
+    <button class="sidebar-show-button" type="button" data-site-sidebar-show hidden>Show navigation</button>
+    <aside class="site-sidebar" aria-label="Page navigation" data-site-sidebar>
+      <div class="site-sidebar-header">
+        <strong>Results Navigation</strong>
+        <button type="button" data-site-sidebar-hide aria-label="Hide navigation">Hide</button>
       </div>
-      {level_links}
-    </nav>
+      <a class="sidebar-link sidebar-index{" active" if not on_subpage else ""}" href="{'../index.html' if on_subpage else 'index.html'}">Index</a>
+      {group_html}
+    </aside>
     """
 
 
 def build_case_index_section(case_ids: list[str]) -> str:
-    items = []
-    for case_id in case_ids:
-        expected_slices = CASE_SLICES.get(case_id, [])
-        expected_slices_text = ", ".join(f"Y = {value:g} m" for value in expected_slices) if expected_slices else "not specified"
-        items.append((case_id, link_from_root(case_page_path(case_id)), f"Expected slice location(s): {expected_slices_text}."))
+    items = [
+        ("CFD grid convergence", link_from_root(category_page_path("cfd_grid_convergence")), "Required (R) CFD data for NACA0012 or ONERA M6."),
+        ("Icing grid convergence", link_from_root(category_page_path("icing_grid_convergence")), "Required (R) icing data for ONERA M6, AE3932, or AE3933."),
+        ("Optional CFD grid convergence", link_from_root(category_page_path("optional_cfd_grid_convergence")), "Optional (O) CFD data for NACA0012 or ONERA M6."),
+        ("Optional icing grid convergence", link_from_root(category_page_path("optional_icing_grid_convergence")), "Optional (O) icing data for ONERA M6, AE3932, or AE3933."),
+        ("Grid-level plots", link_from_root(category_page_path("grid_level_plots")), "L1–L4 CutData and ice-shape plots for each case."),
+    ]
 
     return f"""
     <section class="participant-section">
-      <h2>Cases</h2>
+      <h2>Results</h2>
+      {build_link_list(items)}
+    </section>
+    """
+
+
+def build_geometry_landing_content(geometry_id: str, case_ids: list[str]) -> str:
+    geometry_cases = cases_by_geometry(case_ids)[geometry_id]
+    items = [(
+        "CFD grid convergence",
+        link_from_pages(cfd_convergence_page_path(geometry_id)),
+        "Shared aerodynamic grid-convergence plots for this model.",
+    )]
+    for case_id in geometry_cases:
+        condition_label = case_id.replace("TC_NACA0012_", "") if geometry_id == "NACA0012" else "Icing condition"
+        items.append((
+            f"{condition_label} — Icing grid convergence",
+            link_from_pages(icing_convergence_page_path(case_id)),
+            "Icing-mass convergence and optional grid-level plots for this condition.",
+        ))
+
+    return f"""
+    <section class="participant-section">
+      <h2>{escape(geometry_id)}</h2>
+      <p class="plot-description">Choose the shared CFD study or an icing condition.</p>
+      {build_link_list(items)}
+    </section>
+    """
+
+
+def display_case_name(case_id: str) -> str:
+    if case_id == "TC_ONERAM6":
+        return "ONERA M6"
+    return case_id.replace("TC_NACA0012_", "NACA0012 ")
+
+
+def build_category_landing_content(category: str, case_ids: list[str]) -> str:
+    if category in {"cfd_grid_convergence", "optional_cfd_grid_convergence"}:
+        optional = category.startswith("optional_")
+        items = []
+        for geometry_id in cases_by_geometry(case_ids):
+            path = optional_cfd_convergence_page_path(geometry_id) if optional else cfd_convergence_page_path(geometry_id)
+            items.append((geometry_id, link_from_pages(path), f"{'Optional (O)' if optional else 'Required (R)'} CFD convergence plots."))
+    elif category in {"icing_grid_convergence", "optional_icing_grid_convergence"}:
+        optional = category.startswith("optional_")
+        items = []
+        for case_id in case_ids:
+            requirement_label = "Optional (O)" if optional else "Required (R)"
+            for metric, label in (("water", "Water mass"), ("ice", "Ice mass"), ("evaporation", "Water evaporation")):
+                items.append((
+                    f"{display_case_name(case_id)} — {label}",
+                    link_from_pages(icing_metric_page_path(case_id, metric, optional=optional)),
+                    f"{requirement_label} {label.lower()} convergence plots.",
+                ))
+    elif category == "grid_level_plots":
+        items = []
+        for case_id in case_ids:
+            for grid_level in sorted(VALID_GRID_LEVELS):
+                items.append((f"{display_case_name(case_id)} — {grid_level} Cut-Data", link_from_pages(cutdata_page_path(case_id, grid_level)), "Cut-Data comparison plots."))
+                items.append((f"{display_case_name(case_id)} — {grid_level} Ice-Shape", link_from_pages(ice_shape_page_path(case_id, grid_level)), "Ice-shape comparison plots."))
+    else:
+        raise ValueError(f"Unknown site category: {category}")
+
+    title = category.replace("_", " ").title().replace("Cfd", "CFD")
+    return f"""
+    <section class="participant-section">
+      <h2>{escape(title)}</h2>
       {build_link_list(items)}
     </section>
     """
@@ -902,6 +1163,51 @@ def build_grid_page_content(participants, case_id: str, grid_level: str) -> str:
     """
 
 
+def build_grid_view_switch(case_id: str, grid_level: str, target: str) -> str:
+    if target == "ice_shape":
+        href = link_from_pages(ice_shape_page_path(case_id, grid_level))
+        label = f"View {grid_level} Ice-Shape plots"
+        description = "Continue to the ice-shape results for this test case and grid level."
+    else:
+        href = link_from_pages(cutdata_page_path(case_id, grid_level))
+        label = f"View {grid_level} Cut-Data plots"
+        description = "Return to the Cut-Data results for this test case and grid level."
+    return f"""
+    <nav class="grid-view-switch" aria-label="Switch grid-level plot type">
+      <span>{escape(description)}</span>
+      <a href="{escape(href)}">{escape(label)} <span aria-hidden="true">→</span></a>
+    </nav>
+    """
+
+
+def build_cutdata_page_content(participants, case_id: str, grid_level: str) -> str:
+    return f"""
+    <section class="page-filter-toolbar" aria-label="Page plot controls">
+      <button type="button" data-page-filter-action="show">Show all plots</button>
+      <button type="button" data-page-filter-action="hide">Hide all plots</button>
+    </section>
+    <section class="plot-subsection">
+      <h3>{escape(display_case_name(case_id))} | {escape(grid_level)} | Cut-Data</h3>
+      {build_grid_level_cutdata_plots(participants, case_id, grid_level)}
+    </section>
+    {build_grid_view_switch(case_id, grid_level, 'ice_shape')}
+    """
+
+
+def build_ice_shape_page_content(participants, case_id: str, grid_level: str) -> str:
+    return f"""
+    <section class="page-filter-toolbar" aria-label="Page plot controls">
+      <button type="button" data-page-filter-action="show">Show all plots</button>
+      <button type="button" data-page-filter-action="hide">Hide all plots</button>
+    </section>
+    <section class="plot-subsection">
+      <h3>{escape(display_case_name(case_id))} | {escape(grid_level)} | Ice-Shape</h3>
+      {build_ice_shape_section(participants, case_id, grid_level)}
+    </section>
+    {build_grid_view_switch(case_id, grid_level, 'cutdata')}
+    """
+
+
 def build_convergence_page_content(participants, case_id: str) -> str:
     return f"""
     <section class="plot-subsection">
@@ -909,6 +1215,32 @@ def build_convergence_page_content(participants, case_id: str) -> str:
       {build_grid_convergence_section(participants, case_id)}
     </section>
     """
+
+
+def build_cfd_convergence_page_content(participants, case_id: str) -> str:
+    return build_grid_convergence_section(participants, case_id, category="cfd")
+
+
+def build_icing_convergence_page_content(participants, case_id: str) -> str:
+    return build_grid_convergence_section(participants, case_id, category="icing", requirement="required")
+
+
+def build_optional_cfd_convergence_page_content(participants, case_id: str) -> str:
+    return build_grid_convergence_section(participants, case_id, category="cfd", requirement="optional")
+
+
+def build_optional_icing_convergence_page_content(participants, case_id: str) -> str:
+    return build_grid_convergence_section(participants, case_id, category="icing", requirement="optional")
+
+
+def build_icing_metric_page_content(participants, case_id: str, metric: str, optional: bool = False) -> str:
+    return build_grid_convergence_section(
+        participants,
+        case_id,
+        category="icing",
+        requirement="optional" if optional else "required",
+        metric=metric,
+    )
 
 
 def build_slideshow_content(participants, case_ids: list[str]) -> str:
@@ -1019,6 +1351,8 @@ def build_page_html(title: str, body_html: str, stylesheet_href: str = "style.cs
         </main>
         {VARIABLE_FILTER_SCRIPT}
         {PARTICIPANT_DETAILS_SCRIPT}
+        {SITE_SIDEBAR_SCRIPT}
+        {PLOT_DOWNLOAD_SCRIPT}
         </body>
     </html>
     """
@@ -1036,7 +1370,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--png", action="store_true", help="Export every generated plot as a PNG instead of building HTML pages.")
     parser.add_argument("--lower-res", action="store_true", help="Export PNGs at 1350x900 instead of the default 4050x2700. Used with --png.")
     parser.add_argument("--no-exp", action="store_true", help="Exclude experimental results from every generated plot.")
+    parser.add_argument(
+        "--var",
+        dest="variables",
+        action="append",
+        help=(
+            "Generate only the selected variable. May be repeated or comma-separated, "
+            "for example --var cp or --var cp --var beta."
+        ),
+    )
     return parser.parse_args()
+
+
+def parse_variable_filter(values: list[str] | None) -> set[str] | None:
+    if not values:
+        return None
+    variables = {
+        item.strip().lower().replace("-", "_")
+        for value in values
+        for item in value.split(",")
+        if item.strip()
+    }
+    return variables or None
 
 
 def write_png_plots(participants, case_ids: list[str], output_dir: Path, lower_res: bool = False) -> None:
@@ -1063,6 +1418,54 @@ def write_png_plots(participants, case_ids: list[str], output_dir: Path, lower_r
 def write_case_pages(participants, case_ids: list[str]) -> None:
     PAGES_DIR.mkdir(parents=True, exist_ok=True)
 
+    category_titles = {
+        "cfd_grid_convergence": "CFD grid convergence",
+        "icing_grid_convergence": "Icing grid convergence",
+        "optional_cfd_grid_convergence": "Optional CFD grid convergence",
+        "optional_icing_grid_convergence": "Optional icing grid convergence",
+        "grid_level_plots": "Grid-level plots",
+    }
+    for category, title in category_titles.items():
+        category_html = build_page_html(
+            title=title,
+            body_html=build_category_landing_content(category, case_ids),
+            stylesheet_href="../style.css",
+            back_href="../index.html",
+            nav_html=build_page_navigation(case_ids, current_view=category),
+        )
+        category_page_path(category).write_text(category_html, encoding="utf-8")
+
+    for geometry_id in cases_by_geometry(case_ids):
+        geometry_html = build_page_html(
+            title=geometry_id,
+            body_html=build_geometry_landing_content(geometry_id, case_ids),
+            stylesheet_href="../style.css",
+            back_href="../index.html",
+            nav_html=build_page_navigation(case_ids, current_view="geometry", current_geometry=geometry_id),
+        )
+        geometry_page_path(geometry_id).write_text(geometry_html, encoding="utf-8")
+
+        cfd_case_id = shared_cfd_case_id(geometry_id, case_ids)
+        cfd_html = build_page_html(
+            title=f"{geometry_id} | CFD grid convergence",
+            body_html=build_cfd_convergence_page_content(participants, cfd_case_id),
+            stylesheet_href="../style.css",
+            back_href=link_from_pages(category_page_path("cfd_grid_convergence")),
+            back_label="CFD grid convergence",
+            nav_html=build_page_navigation(case_ids, current_view="cfd_grid_convergence", current_geometry=geometry_id),
+        )
+        cfd_convergence_page_path(geometry_id).write_text(cfd_html, encoding="utf-8")
+
+        optional_cfd_html = build_page_html(
+            title=f"{geometry_id} | Optional CFD grid convergence",
+            body_html=build_optional_cfd_convergence_page_content(participants, cfd_case_id),
+            stylesheet_href="../style.css",
+            back_href=link_from_pages(category_page_path("optional_cfd_grid_convergence")),
+            back_label="Optional CFD grid convergence",
+            nav_html=build_page_navigation(case_ids, current_view="optional_cfd_grid_convergence", current_geometry=geometry_id),
+        )
+        optional_cfd_convergence_page_path(geometry_id).write_text(optional_cfd_html, encoding="utf-8")
+
     for case_id in case_ids:
         case_html = build_page_html(
             title=f"{case_id}",
@@ -1083,21 +1486,81 @@ def write_case_pages(participants, case_ids: list[str]) -> None:
         )
         convergence_page_path(case_id).write_text(convergence_html, encoding="utf-8")
 
+        geometry_id = geometry_for_case(case_id)
+        icing_html = build_page_html(
+            title=f"{case_id} | Icing grid convergence",
+            body_html=build_icing_convergence_page_content(participants, case_id),
+            stylesheet_href="../style.css",
+            back_href=link_from_pages(category_page_path("icing_grid_convergence")),
+            back_label="Icing grid convergence",
+            nav_html=build_page_navigation(case_ids, current_case_id=case_id, current_view="icing_grid_convergence", current_geometry=geometry_id),
+        )
+        icing_convergence_page_path(case_id).write_text(icing_html, encoding="utf-8")
+
+        optional_icing_html = build_page_html(
+            title=f"{display_case_name(case_id)} | Optional icing grid convergence",
+            body_html=build_optional_icing_convergence_page_content(participants, case_id),
+            stylesheet_href="../style.css",
+            back_href=link_from_pages(category_page_path("optional_icing_grid_convergence")),
+            back_label="Optional icing grid convergence",
+            nav_html=build_page_navigation(case_ids, current_case_id=case_id, current_view="optional_icing_grid_convergence", current_geometry=geometry_id),
+        )
+        optional_icing_convergence_page_path(case_id).write_text(optional_icing_html, encoding="utf-8")
+
+        for metric, metric_label in (("water", "Water mass"), ("ice", "Ice mass"), ("evaporation", "Water evaporation")):
+            for optional in (False, True):
+                category = "optional_icing_grid_convergence" if optional else "icing_grid_convergence"
+                view = f"{'optional_' if optional else ''}icing_{metric}"
+                requirement_label = "Optional icing grid convergence" if optional else "Icing grid convergence"
+                metric_html = build_page_html(
+                    title=f"{display_case_name(case_id)} | {'Optional ' if optional else ''}{metric_label} grid convergence",
+                    body_html=build_icing_metric_page_content(participants, case_id, metric, optional=optional),
+                    stylesheet_href="../style.css",
+                    back_href=link_from_pages(category_page_path(category)),
+                    back_label=requirement_label,
+                    nav_html=build_page_navigation(case_ids, current_case_id=case_id, current_view=view, current_geometry=geometry_id),
+                )
+                icing_metric_page_path(case_id, metric, optional=optional).write_text(metric_html, encoding="utf-8")
+
         for grid_level in sorted(VALID_GRID_LEVELS):
             grid_html = build_page_html(
                 title=f"{case_id} | {grid_level}",
                 body_html=build_grid_page_content(participants, case_id, grid_level),
                 stylesheet_href="../style.css",
-                back_href=link_from_pages(case_page_path(case_id)),
-                back_label=case_id,
+                back_href=link_from_pages(category_page_path("grid_level_plots")),
+                back_label="Grid-level plots",
                 nav_html=build_page_navigation(case_ids, current_case_id=case_id, current_view=grid_level),
             )
             grid_page_path(case_id, grid_level).write_text(grid_html, encoding="utf-8")
+
+            cutdata_html = build_page_html(
+                title=f"{display_case_name(case_id)} | {grid_level} | Cut-Data",
+                body_html=build_cutdata_page_content(participants, case_id, grid_level),
+                stylesheet_href="../style.css",
+                back_href=link_from_pages(category_page_path("grid_level_plots")),
+                back_label="Grid-level plots",
+                nav_html=build_page_navigation(case_ids, current_case_id=case_id, current_view=f"{grid_level}_cutdata"),
+            )
+            cutdata_page_path(case_id, grid_level).write_text(cutdata_html, encoding="utf-8")
+
+            ice_shape_html = build_page_html(
+                title=f"{display_case_name(case_id)} | {grid_level} | Ice-Shape",
+                body_html=build_ice_shape_page_content(participants, case_id, grid_level),
+                stylesheet_href="../style.css",
+                back_href=link_from_pages(category_page_path("grid_level_plots")),
+                back_label="Grid-level plots",
+                nav_html=build_page_navigation(case_ids, current_case_id=case_id, current_view=f"{grid_level}_ice_shape"),
+            )
+            ice_shape_page_path(case_id, grid_level).write_text(ice_shape_html, encoding="utf-8")
 
 
 def main() -> None:
     args = parse_args()
     configure_output_paths(args.participant_id)
+    variable_filter = parse_variable_filter(args.variables)
+    cutdata_builder.set_variable_filter(variable_filter)
+    convergence_data_builder.set_variable_filter(variable_filter)
+    iceshape_builder.set_variable_filter(variable_filter)
     cutdata_builder.set_include_experimental_data(not args.no_exp)
     iceshape_builder.set_include_experimental_data(not args.no_exp)
 

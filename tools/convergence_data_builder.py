@@ -4,6 +4,7 @@ from functools import lru_cache
 from html import escape
 from pathlib import Path
 from typing import Any
+import math
 import re
 
 import pandas as pd
@@ -23,7 +24,41 @@ GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
     {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
 ]
 
+CFD_GRID_CONVERGENCE_PLOTS = [
+    plot_spec for plot_spec in GRID_CONVERGENCE_PLOTS
+    if not plot_spec.get("combined_icing_plot", False)
+]
+ICING_GRID_CONVERGENCE_PLOTS = [
+    plot_spec for plot_spec in GRID_CONVERGENCE_PLOTS
+    if plot_spec.get("combined_icing_plot", False)
+]
+OPTIONAL_ICING_DIAMETER_PLOTS: list[dict[str, Any]] = [
+    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
+]
+
 GRID_SPACING_COLUMN = "N_NEGATIVE_ONE_THIRD"
+VARIABLE_FILTER: set[str] | None = None
+
+
+def set_variable_filter(variables: set[str] | None) -> None:
+    global VARIABLE_FILTER
+    VARIABLE_FILTER = variables
+
+
+def plot_matches_variable_filter(plot_spec: dict[str, Any]) -> bool:
+    if VARIABLE_FILTER is None:
+        return True
+    plot_key = plot_spec["plot_key"].lower()
+    aliases = {plot_key, plot_key.removesuffix("_vs_n"), plot_key.replace("_by_diameter_vs_n", "")}
+    if plot_key.startswith("water_evap_mass"):
+        aliases.update({"evaporation", "water_evaporation", "water_evap_mass"})
+    elif plot_key.startswith("water_mass"):
+        aliases.update({"water", "water_mass"})
+    elif plot_key.startswith("ice_mass"):
+        aliases.update({"ice", "ice_mass"})
+    return bool(aliases & VARIABLE_FILTER)
 
 
 def grid_cell_reference_path_for_case(case_id: str) -> Path | None:
@@ -67,6 +102,11 @@ def extract_icing_bin_set_from_zone_name(zone_name: str) -> str | None:
     return match.group("bin_set").upper()
 
 
+def extract_icing_roughness_key_from_zone_name(zone_name: str) -> str:
+    match = re.search(r"_roughness_(?P<roughness>.+?)(?:_by_diameter)?$", zone_name, re.IGNORECASE)
+    return match.group("roughness") if match is not None else "unspecified"
+
+
 def bin_count_from_bin_set(bin_set: str) -> int | None:
     match = re.search(r"\d+", bin_set)
     if match is None:
@@ -82,6 +122,14 @@ def is_required_grid_convergence_zone(zone) -> bool:
         return True
 
     return any(str(value).strip().lower() == "required" for value in zone.data[requirement_column])
+
+
+def grid_convergence_zone_matches_requirement(zone, requirement: str) -> bool:
+    requirement_column = find_column_case_insensitive(zone.data.columns, ["SOURCE_REQUIREMENT", "SourceRequirement"])
+    if requirement_column is None:
+        return requirement == "required"
+    values = {str(value).strip().lower() for value in zone.data[requirement_column]}
+    return requirement.lower() in values
 
 def slugify(text: str) -> str:
     text = text.strip().lower()
@@ -107,6 +155,13 @@ def format_roughness_title(roughness_key: str) -> str:
         return f"Roughness height = {value} mm"
 
     return roughness_key
+
+
+def format_icing_roughness_title(roughness_key: str) -> str | None:
+    """Return a visible icing roughness label, omitting absent metadata."""
+    if not roughness_key or roughness_key == "unspecified":
+        return None
+    return format_roughness_title(roughness_key)
 
 
 def roughness_sort_key(roughness_key: str) -> tuple[int, float, str]:
@@ -270,7 +325,15 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
             encoding="utf-8",
         )
         return f'<iframe class="plotly-lazy-frame" data-plot-src="PLOTS/{escape(filename)}.html" title="{escape(filename)}"></iframe><div class="plot-loading">Plot queued…</div>'
-    return figure_html
+    return f"""
+    <div class="plot-download-shell" data-plot-filename="{escape(filename)}" data-plot-title="{escape(plot_title)}">
+      {figure_html}
+      <div class="plot-download-actions">
+        <button type="button" data-plot-download="with-legend">Download PNG with legend</button>
+        <button type="button" data-plot-download="without-legend">Download PNG without legend</button>
+      </div>
+    </div>
+    """
 
 
 def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 520) -> go.Figure:
@@ -291,6 +354,30 @@ def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 52
     return fig
 
 
+def style_grid_level_x_axis(fig: go.Figure, case_id: str) -> go.Figure:
+    """Label grid-spacing coordinates with their corresponding L1-L4 names."""
+    counts = grid_cell_counts_for_case(case_id)
+    levels = sorted(counts)
+    if not levels:
+        return fig
+    tick_values = [counts[level] ** (-1.0 / 3.0) for level in levels]
+    fig.update_xaxes(
+        type="log",
+        tickmode="array",
+        tickvals=tick_values,
+        ticktext=[f"L{level}" for level in levels],
+        range=[
+            min(math.log10(value) for value in tick_values) - 0.04,
+            max(math.log10(value) for value in tick_values) + 0.04,
+        ],
+        title=dict(
+            text="Grid level<br><span style='font-size:14px'>&lt;- Finer (more cells)&nbsp;&nbsp;|&nbsp;&nbsp;Coarser (fewer cells) -&gt;</span>",
+            font=dict(size=18),
+        ),
+    )
+    return fig
+
+
 def style_inverse_bin_figure(fig: go.Figure, y_label: str, height: int = 520) -> go.Figure:
     fig.update_layout(
         font=dict(family="Arial, Helvetica, sans-serif", size=16),
@@ -298,7 +385,16 @@ def style_inverse_bin_figure(fig: go.Figure, y_label: str, height: int = 520) ->
         height=height,
         title=None,
         showlegend=True,
-        xaxis=dict(title=dict(text="1 / number of bins [-]", font=dict(size=18)), type="log", tickformat=".3g", ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
+        xaxis=dict(
+            title=dict(text="Droplet distribution", font=dict(size=18)),
+            type="log",
+            range=[-1.25, 0.05],
+            tickmode="array",
+            tickvals=[1.0 / 15.0, 1.0 / 7.0, 1.0 / 3.0, 1.0],
+            ticktext=["15-bin", "7-bin", "3-bin", "1-bin"],
+            ticks="outside", showline=True, linecolor="black", linewidth=2,
+            mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False,
+        ),
         yaxis=dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
         legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
         margin=dict(l=90, r=220, t=30, b=95),
@@ -308,7 +404,7 @@ def style_inverse_bin_figure(fig: go.Figure, y_label: str, height: int = 520) ->
     return fig
 
 
-def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[str, Any], roughness_filter: str | None = None) -> tuple[go.Figure, int, list[str]]:
+def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[str, Any], roughness_filter: str | None = None, requirement: str = "required") -> tuple[go.Figure, int, list[str]]:
     seen_trace_keys: set[tuple[str, str, str]] = set()
 
     fig = go.Figure()
@@ -326,6 +422,8 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
         participant_had_variable = False
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
+                continue
             zone_is_diameter = "by_diameter" in zone_name.lower()
             roughness_key = extract_roughness_key_from_zone_name(zone_name)
             if roughness_filter is not None:
@@ -456,20 +554,21 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
                 skipped_notes.append(f"Participant ID {label} did not provide {variable_name}.")
 
     style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    style_grid_level_x_axis(fig, case_id)
     return fig, trace_count, skipped_notes
 
 
-def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
+def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> str:
     if plot_spec.get("diameter_plot", False):
-        return build_grid_convergence_diameter_subsection(participants, case_id, plot_spec)
+        return build_grid_convergence_diameter_subsection(participants, case_id, plot_spec, requirement=requirement)
 
     if plot_spec.get("combined_icing_plot", False):
-        return build_combined_icing_subsection(participants, case_id, plot_spec)
+        return build_combined_icing_subsection(participants, case_id, plot_spec, requirement=requirement)
 
     if plot_spec.get("group_by_roughness", False):
-        return build_grid_convergence_roughness_subsection(participants, case_id, plot_spec)
+        return build_grid_convergence_roughness_subsection(participants, case_id, plot_spec, requirement=requirement)
 
-    fig, trace_count, skipped_notes = build_grid_convergence_figure(participants, case_id, plot_spec)
+    fig, trace_count, skipped_notes = build_grid_convergence_figure(participants, case_id, plot_spec, requirement=requirement)
 
     if trace_count == 0:
         return ""
@@ -495,25 +594,52 @@ def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec
     """
 
 
-def build_grid_convergence_section(participants, case_id: str) -> str:
+def build_grid_convergence_section(participants, case_id: str, category: str = "all", requirement: str = "required", metric: str | None = None) -> str:
+    """Build CFD, icing, or all convergence plots for a case.
+
+    Keeping ``all`` as the default preserves the public builder API used by PNG
+    exports and slideshow mode while allowing the website to present CFD and
+    icing convergence as distinct views.
+    """
+    plot_specs = {
+        "all": GRID_CONVERGENCE_PLOTS,
+        "cfd": CFD_GRID_CONVERGENCE_PLOTS,
+        "icing": ICING_GRID_CONVERGENCE_PLOTS,
+    }.get(category)
+    if plot_specs is None:
+        raise ValueError(f"Unknown grid-convergence category: {category}")
+    if category == "icing" and requirement == "optional":
+        plot_specs = [*plot_specs, *OPTIONAL_ICING_DIAMETER_PLOTS]
+    if metric is not None:
+        metric_plot_keys = {
+            "water": {"water_mass_vs_n", "water_mass_by_diameter_vs_n"},
+            "ice": {"ice_mass_vs_n", "ice_mass_by_diameter_vs_n"},
+            "evaporation": {"water_evap_mass_vs_n", "water_evap_mass_by_diameter_vs_n"},
+        }
+        if metric not in metric_plot_keys:
+            raise ValueError(f"Unknown icing-convergence metric: {metric}")
+        plot_specs = [plot_spec for plot_spec in plot_specs if plot_spec["plot_key"] in metric_plot_keys[metric]]
+    plot_specs = [plot_spec for plot_spec in plot_specs if plot_matches_variable_filter(plot_spec)]
+
     html = ""
 
-    for plot_spec in GRID_CONVERGENCE_PLOTS:
-        html += build_grid_convergence_plot_subsection(participants, case_id, plot_spec)
+    for plot_spec in plot_specs:
+        html += build_grid_convergence_plot_subsection(participants, case_id, plot_spec, requirement=requirement)
 
     if not html.strip():
-        return ""
+        label = "optional (O)" if requirement == "optional" else "required (R)"
+        return f'<div class="warning-box">No {escape(label)} {escape(category.upper())} grid-convergence data were found for this selection.</div>'
 
     return f"""
     <section class="plot-subsection grid-convergence-section plot-filter-scope">
-      <h3>Grid convergence</h3>
+      <h3>{escape(('Optional ' if requirement == 'optional' else '') + {'all': 'Grid convergence', 'cfd': 'CFD grid convergence', 'icing': 'Icing grid convergence'}[category])}</h3>
       <div class="variable-filter-controls" data-filter-title="Grid-convergence variables"></div>
       {html}
     </section>
     """
 
-def collect_diameter_groups(participants, case_id: str, plot_spec: dict[str, Any]) -> list[tuple[str, float, float]]:
-    groups: set[tuple[str, float, float]] = set()
+def collect_diameter_groups(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> list[tuple[str, str, float, float]]:
+    groups: set[tuple[str, str, float, float]] = set()
 
     for participant, case_data in iter_case_data(participants, case_id):
         if case_data.grid_convergence_data is None:
@@ -521,6 +647,8 @@ def collect_diameter_groups(participants, case_id: str, plot_spec: dict[str, Any
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             if "by_diameter" not in zone_name.lower():
+                continue
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
                 continue
 
             diameter_column = find_column_case_insensitive(zone.data.columns, ["DIAMETER", "Diameter"])
@@ -538,11 +666,12 @@ def collect_diameter_groups(participants, case_id: str, plot_spec: dict[str, Any
                 if diameter <= -998.0 or bin_number <= -998.0:
                     continue
 
-                groups.add((bin_set, float(bin_number), float(diameter)))
+                roughness_key = extract_icing_roughness_key_from_zone_name(zone_name)
+                groups.add((roughness_key, bin_set, float(bin_number), float(diameter)))
 
     return sorted(groups, key=lambda item: (item[0], item[1], item[2]))
 
-def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec: dict[str, Any], target_bin_set: str, target_bin_number: float, target_diameter: float) -> tuple[go.Figure, int, list[str]]:
+def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec: dict[str, Any], target_bin_set: str, target_bin_number: float, target_diameter: float, requirement: str = "required", roughness_filter: str | None = None) -> tuple[go.Figure, int, list[str]]:
     fig = go.Figure()
     trace_count = 0
     skipped_notes: list[str] = []
@@ -557,6 +686,10 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             if "by_diameter" not in zone_name.lower():
+                continue
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
+                continue
+            if roughness_filter is not None and extract_icing_roughness_key_from_zone_name(zone_name) != roughness_filter:
                 continue
 
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
@@ -587,13 +720,17 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
 
             seen_trace_keys.add(trace_key)
 
+            roughness_key = extract_icing_roughness_key_from_zone_name(zone_name)
+            roughness_label = format_icing_roughness_title(roughness_key)
+            trace_label = f"{label} | {roughness_label}" if roughness_label else label
+
             fig.add_trace(
                 go.Scatter(
                     x=data[GRID_SPACING_COLUMN],
                     y=data[y_column],
                     mode="lines+markers",
-                    name=label,
-                    legendgroup=label,
+                    name=trace_label,
+                    legendgroup=f"{label}_{roughness_key}",
                     legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
                     marker=participant_marker(participant.participant_id),
@@ -604,7 +741,8 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
                         f"Bin set: {escape(target_bin_set)}<br>"
                         f"Bin: {target_bin_number:g}<br>"
                         f"Diameter: {target_diameter:g} μm<br>"
-                        f"Zone: {escape(zone_name)}<br>"
+                        + (f"Roughness: {escape(roughness_label)}<br>" if roughness_label else "")
+                        + f"Zone: {escape(zone_name)}<br>"
                         f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>"
                         f"{escape(y_column)}=%{{y}}<br>"
                         "Grid level=%{customdata[0]}<br>"
@@ -616,25 +754,27 @@ def build_grid_convergence_diameter_figure(participants, case_id: str, plot_spec
             trace_count += 1
 
     style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    style_grid_level_x_axis(fig, case_id)
     return fig, trace_count, skipped_notes
 
-def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
-    groups = collect_diameter_groups(participants, case_id, plot_spec)
+def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> str:
+    groups = collect_diameter_groups(participants, case_id, plot_spec, requirement=requirement)
 
     if not groups:
         return ""
 
     html = ""
 
-    for bin_set, bin_number, diameter in groups:
-        fig, trace_count, skipped_notes = build_grid_convergence_diameter_figure(participants, case_id, plot_spec, bin_set, bin_number, diameter)
+    for roughness_key, bin_set, bin_number, diameter in groups:
+        fig, trace_count, skipped_notes = build_grid_convergence_diameter_figure(participants, case_id, plot_spec, bin_set, bin_number, diameter, requirement=requirement, roughness_filter=roughness_key)
 
-        title = f"{plot_spec['title']} | {bin_set} | Diameter {bin_number:g} | D = {diameter:g} μm"
+        roughness_title = format_icing_roughness_title(roughness_key)
+        title = " | ".join(part for part in [plot_spec['title'], roughness_title, bin_set, f"Bin {bin_number:g}", f"D = {diameter:g} μm"] if part)
 
         if trace_count == 0:
             continue
 
-        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(bin_set)}_diameter_{bin_number:g}_{diameter:g}".replace(".", "p")
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(roughness_key)}_{slugify(bin_set)}_diameter_{bin_number:g}_{diameter:g}".replace(".", "p")
         figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
 
         html += f"""
@@ -659,7 +799,7 @@ def build_grid_convergence_diameter_subsection(participants, case_id: str, plot_
     </section>
     """
 
-def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
+def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> list[str]:
     roughness_keys: set[str] = set()
 
     for participant, case_data in iter_case_data(participants, case_id):
@@ -667,6 +807,8 @@ def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, 
             continue
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
+                continue
             if "by_diameter" in zone_name.lower():
                 continue
 
@@ -680,6 +822,11 @@ def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, 
             if x_column is not None and y_column is not None:
                 roughness_keys.add(roughness_key)
 
+    # The committee-required ONERA M6 CFD comparison is defined at KS = 1 mm.
+    # Other ONERA roughness heights belong only on the optional CFD pages.
+    if "ONERAM6" in case_id.upper() and requirement == "required":
+        return ["1mm"] if "1mm" in roughness_keys else []
+
     preferred_order = ["smooth", "0.5mm", "1mm", "1.5mm", "variable_roughness"]
     ordered_keys = [key for key in preferred_order if key in roughness_keys]
 
@@ -692,7 +839,7 @@ def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, 
     )
     return ordered_keys + additional_keys
 
-def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
+def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> list[str]:
     grid_levels: set[str] = set()
 
     for participant, case_data in iter_case_data(participants, case_id):
@@ -702,7 +849,7 @@ def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: di
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             if "by_diameter" in zone_name.lower():
                 continue
-            if not is_required_grid_convergence_zone(zone):
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
                 continue
 
             bin_set = extract_icing_bin_set_from_zone_name(zone_name)
@@ -734,7 +881,7 @@ def collect_combined_icing_grid_levels(participants, case_id: str, plot_spec: di
     return sorted(grid_levels, key=grid_level_number_from_value)
 
 
-def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[str, Any]) -> list[str]:
+def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> list[str]:
     """Return submitted required bin distributions that contain plottable values."""
     bin_sets: set[str] = set()
 
@@ -743,7 +890,7 @@ def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[
             continue
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
-            if "by_diameter" in zone_name.lower() or not is_required_grid_convergence_zone(zone):
+            if "by_diameter" in zone_name.lower() or not grid_convergence_zone_matches_requirement(zone, requirement):
                 continue
 
             bin_set = extract_icing_bin_set_from_zone_name(zone_name)
@@ -762,7 +909,23 @@ def collect_combined_icing_bin_sets(participants, case_id: str, plot_spec: dict[
     return sorted(bin_sets, key=lambda value: (bin_count_from_bin_set(value) or float("inf"), value))
 
 
-def build_distribution_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_bin_set: str) -> tuple[go.Figure, int]:
+def collect_combined_icing_roughness_keys(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> list[str]:
+    roughness_keys: set[str] = set()
+    for _, case_data in iter_case_data(participants, case_id):
+        if case_data.grid_convergence_data is None:
+            continue
+        for zone_name, zone in case_data.grid_convergence_data.zones.items():
+            if "by_diameter" in zone_name.lower() or not grid_convergence_zone_matches_requirement(zone, requirement):
+                continue
+            if extract_icing_bin_set_from_zone_name(zone_name) is None:
+                continue
+            y_column = find_column_case_insensitive(zone.data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+            if y_column is not None and any(pd.to_numeric(zone.data[y_column], errors="coerce") > -998.0):
+                roughness_keys.add(extract_icing_roughness_key_from_zone_name(zone_name))
+    return sorted(roughness_keys, key=roughness_sort_key)
+
+
+def build_distribution_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_bin_set: str, requirement: str = "required", roughness_filter: str | None = None) -> tuple[go.Figure, int]:
     """Plot one droplet distribution across every available grid level."""
     fig = go.Figure()
     trace_count = 0
@@ -773,12 +936,14 @@ def build_distribution_icing_figure(participants, case_id: str, plot_spec: dict[
 
         label = participant_label(participant)
         color = participant_color(participant.participant_id)
-        participant_rows: list[pd.DataFrame] = []
+        participant_rows: dict[str, list[pd.DataFrame]] = {}
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
-            if "by_diameter" in zone_name.lower() or not is_required_grid_convergence_zone(zone):
+            if "by_diameter" in zone_name.lower() or not grid_convergence_zone_matches_requirement(zone, requirement):
                 continue
             if extract_icing_bin_set_from_zone_name(zone_name) != target_bin_set:
+                continue
+            if roughness_filter is not None and extract_icing_roughness_key_from_zone_name(zone_name) != roughness_filter:
                 continue
 
             x_column = find_column_case_insensitive(zone.data.columns, plot_spec["x_candidates"])
@@ -793,48 +958,41 @@ def build_distribution_icing_figure(participants, case_id: str, plot_spec: dict[
             data = valid_numeric_rows(zone.data[selected_columns].copy(), x_column, y_column, positive_columns={x_column})
             data = add_grid_spacing_column(data, case_id, x_column, grid_column=grid_column)
             if not data.empty:
-                participant_rows.append(data)
+                roughness_key = extract_icing_roughness_key_from_zone_name(zone_name)
+                participant_rows.setdefault(roughness_key, []).append(data)
 
         if not participant_rows:
             continue
 
-        data = pd.concat(participant_rows).sort_values(GRID_SPACING_COLUMN)
-        # A required distribution should have one value per level. If duplicate
-        # zones exist, retain the first submitted value instead of drawing loops.
-        data = data.drop_duplicates(subset=["GRID_LEVEL_DISPLAY"], keep="first")
-        y_column = find_column_case_insensitive(data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
-        if y_column is None:
-            continue
-
-        fig.add_trace(
-            go.Scatter(
-                x=data[GRID_SPACING_COLUMN],
-                y=data[y_column],
-                mode="lines+markers",
-                name=label,
-                legendgroup=label,
-                legendrank=participant_legend_rank(participant.participant_id),
-                line=dict(color=color),
-                marker=participant_marker(participant.participant_id),
-                customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
-                hovertemplate=(
-                    f"Participant: {escape(label)}<br>"
-                    f"Case: {escape(case_id)}<br>"
-                    f"Distribution: {escape(target_bin_set)}<br>"
-                    f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>"
-                    f"{escape(y_column)}=%{{y}}<br>"
-                    "Grid level=%{customdata[0]}<br>"
-                    "Num cells=%{customdata[1]:,.0f}<extra></extra>"
-                ),
+        for roughness_key, roughness_rows in sorted(participant_rows.items()):
+            data = pd.concat(roughness_rows).sort_values(GRID_SPACING_COLUMN)
+            data = data.drop_duplicates(subset=["GRID_LEVEL_DISPLAY"], keep="first")
+            y_column = find_column_case_insensitive(data.columns, case_ordered_y_candidates(case_id, plot_spec["y_candidates"]))
+            if y_column is None:
+                continue
+            roughness_label = format_icing_roughness_title(roughness_key)
+            trace_label = f"{label} | {roughness_label}" if roughness_label else label
+            fig.add_trace(
+                go.Scatter(
+                    x=data[GRID_SPACING_COLUMN], y=data[y_column], mode="lines+markers",
+                    name=trace_label,
+                    legendgroup=f"{label}_{roughness_key}",
+                    legendrank=participant_legend_rank(participant.participant_id),
+                    line=dict(color=color), marker=participant_marker(participant.participant_id),
+                    customdata=data[["GRID_LEVEL_DISPLAY", "GRID_CELL_COUNT"]],
+                    hovertemplate=(f"Participant: {escape(label)}<br>Case: {escape(case_id)}<br>Distribution: {escape(target_bin_set)}<br>" + (f"Roughness: {escape(roughness_label)}<br>" if roughness_label else "") +
+                                   f"{escape(format_x_hover_label(GRID_SPACING_COLUMN))}=%{{x:.6g}}<br>{escape(y_column)}=%{{y}}<br>"
+                                   "Grid level=%{customdata[0]}<br>Num cells=%{customdata[1]:,.0f}<extra></extra>"),
+                )
             )
-        )
-        trace_count += 1
+            trace_count += 1
 
     style_xy_figure(fig, plot_spec["x_label"], plot_spec["y_label"])
+    style_grid_level_x_axis(fig, case_id)
     return fig, trace_count
 
 
-def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_grid_level: str) -> tuple[go.Figure, int, list[str]]:
+def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str, Any], target_grid_level: str, requirement: str = "required", roughness_filter: str | None = None) -> tuple[go.Figure, int, list[str]]:
     fig = go.Figure()
     trace_count = 0
     skipped_notes: list[str] = []
@@ -846,12 +1004,14 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
 
         label = participant_label(participant)
         color = participant_color(participant.participant_id)
-        trace_rows: list[dict[str, Any]] = []
+        trace_rows_by_roughness: dict[str, list[dict[str, Any]]] = {}
 
         for zone_name, zone in case_data.grid_convergence_data.zones.items():
             if "by_diameter" in zone_name.lower():
                 continue
-            if not is_required_grid_convergence_zone(zone):
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
+                continue
+            if roughness_filter is not None and extract_icing_roughness_key_from_zone_name(zone_name) != roughness_filter:
                 continue
 
             bin_set = extract_icing_bin_set_from_zone_name(zone_name)
@@ -885,7 +1045,8 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                 except (TypeError, ValueError):
                     continue
 
-                trace_rows.append({
+                roughness_key = extract_icing_roughness_key_from_zone_name(zone_name)
+                trace_rows_by_roughness.setdefault(roughness_key, []).append({
                     "inverse_bin_count": 1.0 / bin_count,
                     "bin_set": bin_set,
                     "bin_count": bin_count,
@@ -893,50 +1054,39 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                     "zone_name": zone_name,
                 })
 
-        if not trace_rows:
+        if not trace_rows_by_roughness:
             continue
 
-        trace_key = (participant.participant_id, plot_spec["plot_key"], target_grid_level)
-        if trace_key in seen_trace_keys:
-            continue
-
-        seen_trace_keys.add(trace_key)
-        trace_rows = sorted(trace_rows, key=lambda item: item["inverse_bin_count"])
-        customdata = [[row["bin_set"], row["bin_count"], row["zone_name"]] for row in trace_rows]
-
-        fig.add_trace(
-            go.Scatter(
-                x=[row["inverse_bin_count"] for row in trace_rows],
-                y=[row["y"] for row in trace_rows],
-                mode="lines+markers",
-                name=label,
-                legendgroup=label,
-                legendrank=participant_legend_rank(participant.participant_id),
-                line=dict(color=color),
-                marker=participant_marker(participant.participant_id),
-                customdata=customdata,
-                hovertemplate=(
-                    f"Participant: {escape(label)}<br>"
-                    f"Case: {escape(case_id)}<br>"
-                    f"Grid level: {escape(target_grid_level)}<br>"
-                    "Bin set: %{customdata[0]}<br>"
-                    "Number of bins: %{customdata[1]}<br>"
-                    "Zone: %{customdata[2]}<br>"
-                    "1 / number of bins=%{x:.6g}<br>"
-                    f"{escape(y_column)}=%{{y}}<extra></extra>"
-                ),
+        for roughness_key, trace_rows in sorted(trace_rows_by_roughness.items()):
+            trace_key = (participant.participant_id, plot_spec["plot_key"], f"{target_grid_level}_{roughness_key}")
+            if trace_key in seen_trace_keys:
+                continue
+            seen_trace_keys.add(trace_key)
+            trace_rows = sorted(trace_rows, key=lambda item: item["inverse_bin_count"])
+            customdata = [[row["bin_set"], row["bin_count"], row["zone_name"]] for row in trace_rows]
+            roughness_label = format_icing_roughness_title(roughness_key)
+            trace_label = f"{label} | {roughness_label}" if roughness_label else label
+            fig.add_trace(
+                go.Scatter(
+                    x=[row["inverse_bin_count"] for row in trace_rows], y=[row["y"] for row in trace_rows],
+                    mode="lines+markers", name=trace_label,
+                    legendgroup=f"{label}_{roughness_key}", legendrank=participant_legend_rank(participant.participant_id),
+                    line=dict(color=color), marker=participant_marker(participant.participant_id), customdata=customdata,
+                    hovertemplate=(f"Participant: {escape(label)}<br>Case: {escape(case_id)}<br>Grid level: {escape(target_grid_level)}<br>" + (f"Roughness: {escape(roughness_label)}<br>" if roughness_label else "") +
+                                   "Bin set: %{customdata[0]}<br>Number of bins: %{customdata[1]}<br>Zone: %{customdata[2]}<br>"
+                                   f"1 / number of bins=%{{x:.6g}}<br>{escape(y_column)}=%{{y}}<extra></extra>"),
+                )
             )
-        )
-
-        trace_count += 1
+            trace_count += 1
 
     style_inverse_bin_figure(fig, plot_spec["y_label"])
     return fig, trace_count, skipped_notes
 
 
-def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
-    grid_levels = collect_combined_icing_grid_levels(participants, case_id, plot_spec)
-    bin_sets = collect_combined_icing_bin_sets(participants, case_id, plot_spec)
+def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> str:
+    grid_levels = collect_combined_icing_grid_levels(participants, case_id, plot_spec, requirement=requirement)
+    bin_sets = collect_combined_icing_bin_sets(participants, case_id, plot_spec, requirement=requirement)
+    roughness_keys = collect_combined_icing_roughness_keys(participants, case_id, plot_spec, requirement=requirement)
 
     if not grid_levels and not bin_sets:
         return ""
@@ -945,14 +1095,16 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
     figures_html = ""
 
     for bin_set in bin_sets:
-        fig, trace_count = build_distribution_icing_figure(participants, case_id, plot_spec, bin_set)
+      for roughness_key in roughness_keys:
+        fig, trace_count = build_distribution_icing_figure(participants, case_id, plot_spec, bin_set, requirement=requirement, roughness_filter=roughness_key)
         if trace_count == 0:
             continue
 
         bin_count = bin_count_from_bin_set(bin_set)
         distribution_label = f"{bin_count}-bin distribution" if bin_count != 1 else "Single-bin distribution"
-        title = f"{plot_spec['title']} | {distribution_label} | All grid levels"
-        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(bin_set)}_all_grid_levels"
+        roughness_title = format_icing_roughness_title(roughness_key)
+        title = " | ".join(part for part in [plot_spec['title'], roughness_title, distribution_label, "All grid levels"] if part)
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(roughness_key)}_{slugify(bin_set)}_all_grid_levels"
         figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
         distributions_html += f"""
         <section class="slice-plot-group">
@@ -964,14 +1116,16 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
         """
 
     for grid_level in grid_levels:
-        fig, trace_count, skipped_notes = build_combined_icing_figure(participants, case_id, plot_spec, grid_level)
+      for roughness_key in roughness_keys:
+        fig, trace_count, skipped_notes = build_combined_icing_figure(participants, case_id, plot_spec, grid_level, requirement=requirement, roughness_filter=roughness_key)
 
-        title = f"{plot_spec['title']} | {grid_level}"
+        roughness_title = format_icing_roughness_title(roughness_key)
+        title = " | ".join(part for part in [plot_spec['title'], roughness_title, grid_level] if part)
 
         if trace_count == 0:
             continue
 
-        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(grid_level)}_vs_inverse_bins"
+        filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}_{slugify(roughness_key)}_{slugify(grid_level)}_vs_inverse_bins"
         figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
 
         figures_html += f"""
@@ -986,13 +1140,14 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
     if not distributions_html.strip() and not figures_html.strip():
         return ""
 
+    requirement_label = "optional" if requirement == "optional" else "required"
     distribution_group = ""
     if distributions_html.strip():
         distribution_group = f"""
         <div class="convergence-orientation-group">
           <h5>Each distribution across all grid levels</h5>
           <p class="plot-description">
-            One figure per droplet distribution (single-bin, 3-bin, and any other submitted required distributions), compared across every available grid level. Legend: Participant ID.
+            One figure per submitted {requirement_label} droplet distribution, compared across every available grid level. Legend: Participant ID.
           </p>
           {distributions_html}
         </div>
@@ -1004,7 +1159,7 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
         <div class="convergence-orientation-group">
           <h5>All distributions at each grid level</h5>
           <p class="plot-description">
-            One figure per grid level, with required droplet distributions plotted against 1 / number of bins. Legend: Participant ID.
+            One figure per grid level, with {requirement_label} droplet distributions plotted against 1 / number of bins. Legend: Participant ID.
           </p>
           {figures_html}
         </div>
@@ -1014,15 +1169,15 @@ def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[
     <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
       <h4>{escape(plot_spec["title"])}</h4>
       <p class="plot-description">
-        Grid convergence for the required icing distributions in both comparison directions. Missing values equal to -999 are ignored.
+        Grid convergence for the {requirement_label} icing distributions in both comparison directions. Missing values equal to -999 are ignored.
       </p>
       {distribution_group}
       {level_group}
     </section>
     """
 
-def build_grid_convergence_roughness_subsection(participants, case_id: str, plot_spec: dict[str, Any]) -> str:
-    roughness_keys = collect_cfd_roughness_keys(participants, case_id, plot_spec)
+def build_grid_convergence_roughness_subsection(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> str:
+    roughness_keys = collect_cfd_roughness_keys(participants, case_id, plot_spec, requirement=requirement)
 
     if not roughness_keys:
         return ""
@@ -1034,7 +1189,7 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
         combined_trace_count = 0
         for roughness_key in roughness_keys:
             roughness_fig, trace_count, _ = build_grid_convergence_figure(
-                participants, case_id, plot_spec, roughness_filter=roughness_key
+                participants, case_id, plot_spec, roughness_filter=roughness_key, requirement=requirement
             )
             combined_trace_count += trace_count
             if combined_fig is None:
@@ -1066,7 +1221,7 @@ def build_grid_convergence_roughness_subsection(participants, case_id: str, plot
         """
 
     for roughness_key in roughness_keys:
-        fig, trace_count, skipped_notes = build_grid_convergence_figure(participants, case_id, plot_spec, roughness_filter=roughness_key)
+        fig, trace_count, skipped_notes = build_grid_convergence_figure(participants, case_id, plot_spec, roughness_filter=roughness_key, requirement=requirement)
 
         roughness_title = format_roughness_title(roughness_key)
 

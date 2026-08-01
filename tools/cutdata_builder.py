@@ -19,6 +19,7 @@ IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
 BETA_BINS = ["BINS01", "BINS03", "BINS07", "BINS15"]
 ENABLE_COMBINED_BETA_BY_PARTICIPANT = False
 INCLUDE_EXPERIMENTAL_DATA = True
+VARIABLE_FILTER: set[str] | None = None
 
 REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
     {
@@ -49,6 +50,23 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
 def set_include_experimental_data(include: bool) -> None:
     global INCLUDE_EXPERIMENTAL_DATA
     INCLUDE_EXPERIMENTAL_DATA = include
+
+
+def set_variable_filter(variables: set[str] | None) -> None:
+    global VARIABLE_FILTER
+    VARIABLE_FILTER = variables
+
+
+def plot_matches_variable_filter(plot_spec: dict[str, Any]) -> bool:
+    if VARIABLE_FILTER is None:
+        return True
+    plot_key = plot_spec["plot_key"].lower()
+    aliases = {plot_key, plot_key.split("_vs_")[0]}
+    if plot_key.startswith("beta_"):
+        aliases.update({"beta", "collection_efficiency"})
+    if plot_key.startswith("surface_temperature"):
+        aliases.update({"temperature", "surface_temperature"})
+    return bool(aliases & VARIABLE_FILTER)
 
 CUTDATA_PLOTS: list[dict[str, Any]] = [
     {
@@ -331,7 +349,15 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
             encoding="utf-8",
         )
         return f'<iframe class="plotly-lazy-frame" data-plot-src="PLOTS/{escape(filename)}.html" title="{escape(filename)}"></iframe><div class="plot-loading">Plot queued…</div>'
-    return figure_html
+    return f"""
+    <div class="plot-download-shell" data-plot-filename="{escape(filename)}" data-plot-title="{escape(plot_title)}">
+      {figure_html}
+      <div class="plot-download-actions">
+        <button type="button" data-plot-download="with-legend">Download PNG with legend</button>
+        <button type="button" data-plot-download="without-legend">Download PNG without legend</button>
+      </div>
+    </div>
+    """
 
 
 def empty_placeholder(title: str, message: str) -> str:
@@ -1007,6 +1033,8 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
 def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) -> str:
     html = ""
     for plot_spec in CUTDATA_PLOTS:
+        if not plot_matches_variable_filter(plot_spec):
+            continue
         if plot_spec.get("plot_key") == "beta_cards_vs_s":
             if not ENABLE_COMBINED_BETA_BY_PARTICIPANT:
                 continue

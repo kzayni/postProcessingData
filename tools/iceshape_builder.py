@@ -84,8 +84,14 @@ EXPERIMENTAL_ICE_SHAPE_FILES = {
     "TC_NACA0012_AE3933": Path("E00_Experimental-Data") / "EXP_AE3933.dat",
 }
 INCLUDE_EXPERIMENTAL_DATA = True
+VARIABLE_FILTER: set[str] | None = None
 
 INCHES_TO_METRES = 0.0254
+
+
+def set_variable_filter(variables: set[str] | None) -> None:
+    global VARIABLE_FILTER
+    VARIABLE_FILTER = variables
 
 # Edit experimental ice-shape appearance here.
 #
@@ -381,7 +387,15 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
             encoding="utf-8",
         )
         return f'<iframe class="plotly-lazy-frame" data-plot-src="PLOTS/{escape(filename)}.html" title="{escape(filename)}"></iframe><div class="plot-loading">Plot queued…</div>'
-    return figure_html
+    return f"""
+    <div class="plot-download-shell" data-plot-filename="{escape(filename)}" data-plot-title="{escape(plot_title)}">
+      {figure_html}
+      <div class="plot-download-actions">
+        <button type="button" data-plot-download="with-legend">Download PNG with legend</button>
+        <button type="button" data-plot-download="without-legend">Download PNG without legend</button>
+      </div>
+    </div>
+    """
 
 
 def empty_placeholder(title: str, message: str) -> str:
@@ -1041,6 +1055,9 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         1. SINGLE_LAYER zones from finalIceShape / iceShape.
         2. FINAL_LAYER zones from finalIceShape / iceShape.
     """
+
+    if VARIABLE_FILTER is not None and not VARIABLE_FILTER.intersection({"ice_shape", "iceshape", "shape"}):
+        return ""
 
     single_figures_html = ""
     multi_figures_html = ""
