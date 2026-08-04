@@ -40,7 +40,7 @@
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
                 
-VARIABLES = "X" "Y" "Z" "Cp" "HTC" "Beta" "Ts" "FF" 
+VARIABLES = "X" "Y" "Z" "HTC" "Beta"  "Cp" "Ts" "FF"
 
 ZONE T="SLICE_Y_0p9144_BINS01_KS_1mm_CUTDATA"
  STRANDID=0, SOLUTIONTIME=0
