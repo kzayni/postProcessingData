@@ -82,6 +82,18 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "reverse_y_axis": True,
     },
     {
+        "plot_key": "cp_vs_s",
+        "title": "Cp vs s",
+        "description": "Pressure coefficient along the selected surface cut(s), plotted against surface distance from the attachment line.",
+        "x_candidates": ["s", "S"],
+        "y_candidates": ["Cp", "CP"],
+        "x_label": "Surface distance from attachment line [m]",
+        "y_label": "Cp [-]",
+        "filename_slug": "cp_vs_s",
+        "bins_filter": None,
+        "reverse_y_axis": True,
+    },
+    {
         "plot_key": "htc_vs_s",
         "title": "HTC vs s",
         "description": "Heat-transfer coefficient along the selected surface cut(s). The no-roughness HTC is plotted as the smooth roughness condition when available.",
@@ -425,6 +437,211 @@ def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 56
     return fig
 
 
+def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
+    """Overlay a leading-edge zoom on a collection-efficiency figure."""
+    source_traces = list(fig.data)
+    points: list[tuple[float, float]] = []
+    for trace in source_traces:
+        if trace.x is None or trace.y is None:
+            continue
+        for x_value, y_value in zip(trace.x, trace.y):
+            try:
+                x_number = float(x_value)
+                y_number = float(y_value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(x_number) and math.isfinite(y_number):
+                points.append((x_number, y_number))
+
+    if len(points) < 2:
+        return fig
+
+    x_values = [point[0] for point in points]
+    x_min, x_max = min(x_values), max(x_values)
+    x_span = x_max - x_min
+    if x_span <= 0:
+        return fig
+
+    # Center a tight window on the largest submitted collection-efficiency
+    # value so the inset compares peak position, height, and shape.
+    peak_x, peak_y = max(points, key=lambda point: point[1])
+    x_center = peak_x
+    x_half_width = 0.045 * x_span
+    zoom_x_min = max(x_min, x_center - x_half_width)
+    zoom_x_max = min(x_max, x_center + x_half_width)
+    zoom_y_values = [
+        y_value
+        for x_value, y_value in points
+        if zoom_x_min <= x_value <= zoom_x_max
+    ]
+    if not zoom_y_values:
+        return fig
+
+    zoom_y_max = max(zoom_y_values)
+    peak_band = max(0.30 * abs(peak_y), 0.05)
+    zoom_y_min = max(min(zoom_y_values), peak_y - peak_band)
+    y_padding = max(0.04 * (zoom_y_max - zoom_y_min), 0.005)
+    zoom_y_range = [zoom_y_min - y_padding, zoom_y_max + y_padding]
+
+    for trace in source_traces:
+        inset_trace = go.Scatter(trace.to_plotly_json())
+        inset_trace.update(xaxis="x2", yaxis="y2", showlegend=False, hoverinfo="skip")
+        fig.add_trace(inset_trace)
+
+    inset_axis_style = dict(
+        ticks="outside",
+        tickfont=dict(size=11),
+        showline=True,
+        linecolor="black",
+        linewidth=2,
+        mirror=True,
+        showgrid=True,
+        gridcolor="#dddddd",
+        zeroline=False,
+    )
+    fig.update_layout(
+        xaxis2=dict(
+            **inset_axis_style,
+            domain=[0.08, 0.46],
+            anchor="y2",
+            range=[zoom_x_min, zoom_x_max],
+        ),
+        yaxis2=dict(
+            **inset_axis_style,
+            domain=[0.55, 0.95],
+            anchor="x2",
+            range=zoom_y_range,
+        ),
+    )
+    fig.add_shape(
+        type="rect",
+        xref="x",
+        yref="y",
+        x0=zoom_x_min,
+        x1=zoom_x_max,
+        y0=zoom_y_range[0],
+        y1=zoom_y_range[1],
+        line=dict(color="#444444", width=1.5, dash="dot"),
+        fillcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+def add_attachment_line(fig: go.Figure) -> go.Figure:
+    """Mark the configured attachment/highlight location on a Cp plot."""
+    fig.add_shape(
+        type="line",
+        xref="x",
+        yref="paper",
+        x0=0.0,
+        x1=0.0,
+        y0=0.0,
+        y1=1.0,
+        line=dict(color="#333333", width=2, dash="dash"),
+    )
+    return fig
+
+
+def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
+    """Overlay a tight, reversed-axis view of the maximum leading-edge Cp."""
+    source_traces = list(fig.data)
+    points: list[tuple[float, float]] = []
+    for trace in source_traces:
+        if trace.x is None or trace.y is None:
+            continue
+        for x_value, y_value in zip(trace.x, trace.y):
+            try:
+                x_number = float(x_value)
+                y_number = float(y_value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(x_number) and math.isfinite(y_number):
+                points.append((x_number, y_number))
+
+    if len(points) < 2:
+        return fig
+
+    x_values = [point[0] for point in points]
+    y_values = [point[1] for point in points]
+    x_min, x_max = min(x_values), max(x_values)
+    x_span = x_max - x_min
+    y_span = max(y_values) - min(y_values)
+    if x_span <= 0 or y_span <= 0:
+        return fig
+
+    peak_x, peak_cp = max(points, key=lambda point: point[1])
+    x_half_width = 0.055 * x_span
+    zoom_x_min = max(x_min, peak_x - x_half_width)
+    zoom_x_max = min(x_max, peak_x + x_half_width)
+    local_y_values = [
+        y_value
+        for x_value, y_value in points
+        if zoom_x_min <= x_value <= zoom_x_max
+    ]
+    if not local_y_values:
+        return fig
+
+    zoom_y_max = max(local_y_values)
+    zoom_y_min = max(min(local_y_values), peak_cp - 0.30 * y_span)
+    y_padding = max(0.04 * (zoom_y_max - zoom_y_min), 0.01)
+    zoom_y_low = zoom_y_min - y_padding
+    zoom_y_high = zoom_y_max + y_padding
+
+    for trace in source_traces:
+        inset_trace = go.Scatter(trace.to_plotly_json())
+        inset_trace.update(xaxis="x2", yaxis="y2", showlegend=False, hoverinfo="skip")
+        fig.add_trace(inset_trace)
+
+    inset_axis_style = dict(
+        ticks="outside",
+        tickfont=dict(size=11),
+        showline=True,
+        linecolor="black",
+        linewidth=2,
+        mirror=True,
+        showgrid=True,
+        gridcolor="#dddddd",
+        zeroline=False,
+    )
+    fig.update_layout(
+        xaxis2=dict(
+            **inset_axis_style,
+            domain=[0.58, 0.96],
+            anchor="y2",
+            range=[zoom_x_min, zoom_x_max],
+        ),
+        yaxis2=dict(
+            **inset_axis_style,
+            domain=[0.55, 0.95],
+            anchor="x2",
+            range=[zoom_y_high, zoom_y_low],
+        ),
+    )
+    fig.add_shape(
+        type="rect",
+        xref="x",
+        yref="y",
+        x0=zoom_x_min,
+        x1=zoom_x_max,
+        y0=zoom_y_low,
+        y1=zoom_y_high,
+        line=dict(color="#444444", width=1.5, dash="dot"),
+        fillcolor="rgba(0,0,0,0)",
+    )
+    if zoom_x_min <= 0.0 <= zoom_x_max:
+        fig.add_shape(
+            type="line",
+            xref="x2",
+            yref="y2",
+            x0=0.0,
+            x1=0.0,
+            y0=zoom_y_low,
+            y1=zoom_y_high,
+            line=dict(color="#333333", width=2, dash="dash"),
+        )
+    return fig
+
+
 def iter_grid_data(participants, case_id: str, grid_level: str):
     """Iterate over all datasets for one case/grid level.
 
@@ -442,7 +659,7 @@ def cut_data_for_plot(dataset_data, plot_spec: dict[str, Any] | None = None):
     """Select participant 015's corrected Cp/Beta coordinates when applicable."""
     plot_key = (plot_spec or {}).get("plot_key", "")
     if (
-        plot_key == "cp_vs_x" or plot_key.startswith("beta_")
+        plot_key.startswith("cp_vs_") or plot_key.startswith("beta_")
     ) and getattr(dataset_data, "cp_beta_cut_data", None) is not None:
         return dataset_data.cp_beta_cut_data
     return dataset_data.cut_data
@@ -731,6 +948,11 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
         reverse_y_axis=plot_spec.get("reverse_y_axis", False),
         y_range=plot_spec.get("y_range"),
     )
+    if is_beta_plot:
+        add_collection_efficiency_inset(fig)
+    if plot_spec["plot_key"] in {"cp_vs_x", "cp_vs_s"}:
+        add_attachment_line(fig)
+        add_cp_leading_edge_inset(fig)
     skipped_notes = sorted(skipped_note_set)
     return fig, trace_count, slice_positions, skipped_notes
 
