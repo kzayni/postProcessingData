@@ -49,70 +49,8 @@ For the single-layer results, the ice shape is obtained using a Lagrangian node-
 
 A scripted grid-generation workflow in Pointwise is used to generate the computational grid after each accretion step.
 
-## Grid Information
-
-Only complete this section if you used grids that are different from the committee-supplied grids.
-
-### `TC_NACA0D012_AE3932_D01`
-
-**Grid Type:**
-
-Unstructured
-
-**Grid Generator:**
-
-Pointwise
-
-| Grid size | `L1` | `L2` | `L3` | `L4` |
-| --- | --- | --- | --- | --- |
-| Total cells |  |  |  |  |
-| Total nodes |  |  |  |  |
-
-### `TC_NACA0D012_AE3933_D01`
-
-**Grid Type:**
-
-Unstructured
-
-**Grid Generator:**
-
-Pointwise
-
-| Grid size | `L1` | `L2` | `L3` | `L4` |
-| --- | --- | --- | --- | --- |
-| Total cells |  |  |  |  |
-| Total nodes |  |  |  |  |
-
-### `TC_ONERAM6_D01`
-
-**Grid Type:**
-
-Unstructured
-
-**Grid Generator:**
-
-Pointwise
-
-| Grid size | `L1` | `L2` | `L3` | `L4` |
-| --- | --- | --- | --- | --- |
-| Total cells |  |  |  |  |
-| Total nodes |  |  |  |  |
-
-**Additional Grid Notes:**
-
-Add any additional information needed to describe the non-committee grids here.
-
-
-## Other Information
-
-Add any other Dataset 01 information here.
-
 ## References
 
-Please provide relevant articles, papers, reports, or other references related to your solver, modeling approach, grid generation method, or submitted work here.
-
-Example format:
-
 ```text
-Author(s), "Title," Journal/Conference/Report, Year. DOI or URL if available.
+
 ```

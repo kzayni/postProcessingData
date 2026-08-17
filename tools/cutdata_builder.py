@@ -7,11 +7,13 @@ from typing import Any
 import math
 import re
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
+from .heat_flux_computations import CASE_SETTINGS as HEAT_FLUX_CASE_SETTINGS, recovery_temperature
 from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
 
 SAVE_IMAGE_PREVIEWS = False
@@ -44,6 +46,28 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
         "rotation_degrees": 4.0,
         "label": "Experimental Cp average",
     },
+    {
+        "case_id": "TC_NACA0012_AE3932",
+        "plot_key": "cp_vs_s",
+        "path": Path("E00_Experimental-Data") / "EXP_NACA0012_CP.dat",
+        "x_column": "X/C",
+        "ordinate_column": "Y/C",
+        "y_columns": ["CP_1", "CP_2"],
+        "x_scale": 0.5334,
+        "surface_distance_from_highlight": True,
+        "label": "Experimental Cp average",
+    },
+    {
+        "case_id": "TC_NACA0012_AE3933",
+        "plot_key": "cp_vs_s",
+        "path": Path("E00_Experimental-Data") / "EXP_NACA0012_CP.dat",
+        "x_column": "X/C",
+        "ordinate_column": "Y/C",
+        "y_columns": ["CP_1", "CP_2"],
+        "x_scale": 0.5334,
+        "surface_distance_from_highlight": True,
+        "label": "Experimental Cp average",
+    },
 ]
 
 
@@ -66,6 +90,8 @@ def plot_matches_variable_filter(plot_spec: dict[str, Any]) -> bool:
         aliases.update({"beta", "collection_efficiency"})
     if plot_key.startswith("surface_temperature"):
         aliases.update({"temperature", "surface_temperature"})
+    if plot_key.startswith("recovery_temperature"):
+        aliases.update({"trec", "t_rec", "temperature", "recovery_temperature"})
     return bool(aliases & VARIABLE_FILTER)
 
 CUTDATA_PLOTS: list[dict[str, Any]] = [
@@ -173,6 +199,18 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "bins_filter": None,
     },
     {
+        "plot_key": "recovery_temperature_vs_s",
+        "title": "Recovery temperature vs s",
+        "description": "Recovery temperature calculated pointwise from Cp using the case freestream temperature and Mach number (gamma = 1.4, recovery factor = 0.9).",
+        "x_candidates": ["s", "S"],
+        "y_candidates": ["Cp", "CP", "PressureCoefficient"],
+        "x_label": "Surface distance from highlight [m]",
+        "y_label": "Recovery temperature [K]",
+        "filename_slug": "recovery_temperature_vs_s",
+        "bins_filter": None,
+        "derived_recovery_temperature": True,
+    },
+    {
         "plot_key": "freezing_fraction_vs_s",
         "title": "Freezing fraction vs s",
         "description": "Freezing fraction along the selected surface cut(s). Values below 1e-9 are shown as -1.0, following the adopted missing/negligible-value convention.",
@@ -190,6 +228,13 @@ BIN_LINE_DASHES = {
     "BINS03": "solid",
     "BINS07": "dash",
     "BINS15": "dot",
+}
+
+GRID_LEVEL_LINE_DASHES = {
+    "L1": "solid",
+    "L2": "dash",
+    "L3": "dot",
+    "L4": "dashdot",
 }
 
 def slugify(text: str) -> str:
@@ -437,13 +482,18 @@ def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 56
     return fig
 
 
-def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
+def add_collection_efficiency_inset(
+    fig: go.Figure,
+    x_range: tuple[float, float] | None = None,
+) -> go.Figure:
     """Overlay a leading-edge zoom on a collection-efficiency figure."""
     source_traces = list(fig.data)
     points: list[tuple[float, float]] = []
+    trace_peaks: list[tuple[float, float]] = []
     for trace in source_traces:
         if trace.x is None or trace.y is None:
             continue
+        trace_points: list[tuple[float, float]] = []
         for x_value, y_value in zip(trace.x, trace.y):
             try:
                 x_number = float(x_value)
@@ -452,6 +502,11 @@ def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
                 continue
             if math.isfinite(x_number) and math.isfinite(y_number):
                 points.append((x_number, y_number))
+                trace_points.append((x_number, y_number))
+        legend_group = str(getattr(trace, "legendgroup", "") or "")
+        if trace_points and not legend_group.startswith("reference_"):
+            trace_peak = max(trace_points, key=lambda point: point[1])
+            trace_peaks.append(trace_peak)
 
     if len(points) < 2:
         return fig
@@ -462,13 +517,20 @@ def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
     if x_span <= 0:
         return fig
 
-    # Center a tight window on the largest submitted collection-efficiency
-    # value so the inset compares peak position, height, and shape.
-    peak_x, peak_y = max(points, key=lambda point: point[1])
-    x_center = peak_x
-    x_half_width = 0.045 * x_span
-    zoom_x_min = max(x_min, x_center - x_half_width)
-    zoom_x_max = min(x_max, x_center + x_half_width)
+    # Include the peak location from every submitted trace. Centering only on
+    # the single largest peak can clip participants whose peaks occur nearby
+    # but at a different surface location.
+    if not trace_peaks:
+        return fig
+    peak_x_values = [point[0] for point in trace_peaks]
+    peak_x_min, peak_x_max = min(peak_x_values), max(peak_x_values)
+    x_center = 0.5 * (peak_x_min + peak_x_max)
+    x_half_width = max(0.006 * x_span, 0.5 * (peak_x_max - peak_x_min) + 0.002 * x_span)
+    if x_range is None:
+        zoom_x_min = max(x_min, x_center - x_half_width)
+        zoom_x_max = min(x_max, x_center + x_half_width)
+    else:
+        zoom_x_min, zoom_x_max = x_range
     zoom_y_values = [
         y_value
         for x_value, y_value in points
@@ -477,10 +539,16 @@ def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
     if not zoom_y_values:
         return fig
 
-    zoom_y_max = max(zoom_y_values)
-    peak_band = max(0.30 * abs(peak_y), 0.05)
-    zoom_y_min = max(min(zoom_y_values), peak_y - peak_band)
-    y_padding = max(0.04 * (zoom_y_max - zoom_y_min), 0.005)
+    # Zoom around the submitted peak values themselves, rather than the full
+    # local curves, so the inset remains a true peak comparison.
+    peak_y_values = [point[1] for point in trace_peaks]
+    peak_band = max(0.20 * max(abs(value) for value in peak_y_values), 0.05)
+    zoom_y_max = max(peak_y_values)
+    zoom_y_min = min(peak_y_values) - peak_band
+    # Leave enough headroom for the full crest and the explicit peak markers.
+    # A merely numeric inclusion with a few thousandths of padding clips the
+    # line/marker against the inset border and makes the peak look missing.
+    y_padding = max(0.35 * peak_band, 0.06)
     zoom_y_range = [zoom_y_min - y_padding, zoom_y_max + y_padding]
 
     for trace in source_traces:
@@ -502,7 +570,7 @@ def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
     fig.update_layout(
         xaxis2=dict(
             **inset_axis_style,
-            domain=[0.08, 0.46],
+            domain=[0.08, 0.30],
             anchor="y2",
             range=[zoom_x_min, zoom_x_max],
         ),
@@ -527,14 +595,33 @@ def add_collection_efficiency_inset(fig: go.Figure) -> go.Figure:
     return fig
 
 
-def add_attachment_line(fig: go.Figure) -> go.Figure:
-    """Mark the configured attachment/highlight location on a Cp plot."""
+def experimental_cp_peak_x(fig: go.Figure) -> float | None:
+    """Return the plotted X coordinate of the highest experimental Cp point."""
+    peak: tuple[float, float] | None = None
+    for trace in fig.data:
+        legend_group = str(getattr(trace, "legendgroup", "") or "")
+        if not legend_group.startswith("reference_cp_vs_"):
+            continue
+        if trace.x is None or trace.y is None:
+            continue
+        for x_value, cp_value in zip(trace.x, trace.y):
+            try:
+                point = (float(cp_value), float(x_value))
+            except (TypeError, ValueError):
+                continue
+            if all(math.isfinite(value) for value in point) and (peak is None or point[0] > peak[0]):
+                peak = point
+    return None if peak is None else peak[1]
+
+
+def add_attachment_line(fig: go.Figure, x_location: float = 0.0) -> go.Figure:
+    """Mark the attachment/highlight location on a Cp plot."""
     fig.add_shape(
         type="line",
         xref="x",
         yref="paper",
-        x0=0.0,
-        x1=0.0,
+        x0=x_location,
+        x1=x_location,
         y0=0.0,
         y1=1.0,
         line=dict(color="#333333", width=2, dash="dash"),
@@ -542,13 +629,21 @@ def add_attachment_line(fig: go.Figure) -> go.Figure:
     return fig
 
 
-def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
+def add_cp_leading_edge_inset(
+    fig: go.Figure,
+    attachment_x: float | None = 0.0,
+    position: str = "upper_right",
+    y_high: float | None = None,
+) -> go.Figure:
     """Overlay a tight, reversed-axis view of the maximum leading-edge Cp."""
     source_traces = list(fig.data)
     points: list[tuple[float, float]] = []
+    trace_peaks: list[tuple[float, float]] = []
+    experimental_peaks: list[tuple[float, float]] = []
     for trace in source_traces:
         if trace.x is None or trace.y is None:
             continue
+        trace_points: list[tuple[float, float]] = []
         for x_value, y_value in zip(trace.x, trace.y):
             try:
                 x_number = float(x_value)
@@ -557,6 +652,14 @@ def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
                 continue
             if math.isfinite(x_number) and math.isfinite(y_number):
                 points.append((x_number, y_number))
+                trace_points.append((x_number, y_number))
+        if trace_points:
+            trace_peak = max(trace_points, key=lambda point: point[1])
+            legend_group = str(getattr(trace, "legendgroup", "") or "")
+            if legend_group.startswith("reference_cp_vs_"):
+                experimental_peaks.append(trace_peak)
+            else:
+                trace_peaks.append(trace_peak)
 
     if len(points) < 2:
         return fig
@@ -569,10 +672,36 @@ def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
     if x_span <= 0 or y_span <= 0:
         return fig
 
-    peak_x, peak_cp = max(points, key=lambda point: point[1])
-    x_half_width = 0.055 * x_span
-    zoom_x_min = max(x_min, peak_x - x_half_width)
-    zoom_x_max = min(x_max, peak_x + x_half_width)
+    if not trace_peaks and not experimental_peaks:
+        return fig
+    participant_peak_x_values = [point[0] for point in trace_peaks]
+    if attachment_x is not None:
+        # Cp insets belong at the attachment line. For NACA0012 Cp-vs-X this
+        # line is already located at the experimental Cp maximum; for Cp-vs-s
+        # it is the s=0 attachment location.
+        peak_x_center = attachment_x
+        all_peak_x_values = participant_peak_x_values + [point[0] for point in experimental_peaks]
+        peak_distance = max((abs(value - peak_x_center) for value in all_peak_x_values), default=0.0)
+        x_half_width = max(0.006 * x_span, peak_distance + 0.002 * x_span)
+    elif experimental_peaks:
+        # The experimental maximum is the focal point. Expand symmetrically
+        # around it until every participant maximum is also inside the inset.
+        experimental_peak_x = max(experimental_peaks, key=lambda point: point[1])[0]
+        peak_x_center = experimental_peak_x
+        participant_distance = max(
+            (abs(value - experimental_peak_x) for value in participant_peak_x_values),
+            default=0.0,
+        )
+        x_half_width = max(0.006 * x_span, participant_distance + 0.002 * x_span)
+    else:
+        peak_x_min = min(participant_peak_x_values)
+        peak_x_max = max(participant_peak_x_values)
+        peak_x_center = 0.5 * (peak_x_min + peak_x_max)
+        x_half_width = max(0.006 * x_span, 0.5 * (peak_x_max - peak_x_min) + 0.002 * x_span)
+    # Keep all participant maxima visible without moving the inset focus away
+    # from the experimental maximum when experimental Cp exists.
+    zoom_x_min = peak_x_center - x_half_width
+    zoom_x_max = peak_x_center + x_half_width
     local_y_values = [
         y_value
         for x_value, y_value in points
@@ -581,11 +710,15 @@ def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
     if not local_y_values:
         return fig
 
-    zoom_y_max = max(local_y_values)
-    zoom_y_min = max(min(local_y_values), peak_cp - 0.30 * y_span)
-    y_padding = max(0.04 * (zoom_y_max - zoom_y_min), 0.01)
+    # Compare maxima across participants (and the experimental maximum when
+    # present) without pulling the inset down over the rest of each curve.
+    peak_y_values = [point[1] for point in trace_peaks + experimental_peaks]
+    peak_band = max(0.20 * max(abs(value) for value in peak_y_values), 0.10)
+    zoom_y_max = max(peak_y_values)
+    zoom_y_min = min(peak_y_values) - peak_band
+    y_padding = max(0.05 * peak_band, 0.01)
     zoom_y_low = zoom_y_min - y_padding
-    zoom_y_high = zoom_y_max + y_padding
+    zoom_y_high = y_high if y_high is not None else zoom_y_max + y_padding
 
     for trace in source_traces:
         inset_trace = go.Scatter(trace.to_plotly_json())
@@ -603,16 +736,22 @@ def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
         gridcolor="#dddddd",
         zeroline=False,
     )
+    inset_domains = {
+        "upper_right": ([0.74, 0.96], [0.55, 0.95]),
+        "lower_middle": ([0.39, 0.61], [0.05, 0.45]),
+        "lower_left": ([0.05, 0.27], [0.05, 0.45]),
+    }
+    x_domain, y_domain = inset_domains.get(position, inset_domains["upper_right"])
     fig.update_layout(
         xaxis2=dict(
             **inset_axis_style,
-            domain=[0.58, 0.96],
+            domain=x_domain,
             anchor="y2",
             range=[zoom_x_min, zoom_x_max],
         ),
         yaxis2=dict(
             **inset_axis_style,
-            domain=[0.55, 0.95],
+            domain=y_domain,
             anchor="x2",
             range=[zoom_y_high, zoom_y_low],
         ),
@@ -628,13 +767,13 @@ def add_cp_leading_edge_inset(fig: go.Figure) -> go.Figure:
         line=dict(color="#444444", width=1.5, dash="dot"),
         fillcolor="rgba(0,0,0,0)",
     )
-    if zoom_x_min <= 0.0 <= zoom_x_max:
+    if attachment_x is not None and zoom_x_min <= attachment_x <= zoom_x_max:
         fig.add_shape(
             type="line",
             xref="x2",
             yref="y2",
-            x0=0.0,
-            x1=0.0,
+            x0=attachment_x,
+            x1=attachment_x,
             y0=zoom_y_low,
             y1=zoom_y_high,
             line=dict(color="#333333", width=2, dash="dash"),
@@ -656,12 +795,15 @@ def iter_grid_data(participants, case_id: str, grid_level: str):
 
 
 def cut_data_for_plot(dataset_data, plot_spec: dict[str, Any] | None = None):
-    """Select participant 015's corrected Cp/Beta coordinates when applicable."""
+    """Select supplemental Cp/Beta cut data when available and applicable."""
     plot_key = (plot_spec or {}).get("plot_key", "")
-    if (
-        plot_key.startswith("cp_vs_") or plot_key.startswith("beta_")
-    ) and getattr(dataset_data, "cp_beta_cut_data", None) is not None:
-        return dataset_data.cp_beta_cut_data
+    supplemental_data = getattr(dataset_data, "cp_beta_cut_data", None)
+    if supplemental_data is not None:
+        supplemental_variables = {variable.lower() for variable in supplemental_data.variables}
+        if plot_key.startswith("cp_vs_") and "cp" in supplemental_variables:
+            return supplemental_data
+        if plot_key.startswith("beta_") and "beta" in supplemental_variables:
+            return supplemental_data
     return dataset_data.cut_data
 
 
@@ -752,14 +894,81 @@ def add_reference_traces(fig: go.Figure, case_id: str, grid_level: str, plot_key
         rotation_angle = math.radians(float(source.get("rotation_degrees", 0.0)))
         cosine = math.cos(rotation_angle)
         sine = math.sin(rotation_angle)
-        x_values = [
-            x_scale * (
-                row[x_index] * cosine
-                - (row[ordinate_index] if ordinate_index is not None else 0.0) * sine
-            )
-            for row in rows
-        ]
         y_values = [sum(row[index] for index in y_indices) / len(y_indices) for row in rows]
+        if source.get("surface_distance_from_highlight") and ordinate_index is not None:
+            # Traverse the lower surface from the trailing edge to the leading
+            # edge, then the upper surface back to the trailing edge. This
+            # matches the signed-s convention used by the submitted cut data.
+            lower = sorted(
+                (index for index, row in enumerate(rows) if row[ordinate_index] <= 0.0),
+                key=lambda index: rows[index][x_index],
+                reverse=True,
+            )
+            upper = sorted(
+                (index for index, row in enumerate(rows) if row[ordinate_index] > 0.0),
+                key=lambda index: rows[index][x_index],
+            )
+            ordered_indices = lower + upper
+            cumulative_by_index: dict[int, float] = {}
+            cumulative_distance = 0.0
+            previous_index: int | None = None
+            for index in ordered_indices:
+                if previous_index is not None:
+                    dx = rows[index][x_index] - rows[previous_index][x_index]
+                    dy = rows[index][ordinate_index] - rows[previous_index][ordinate_index]
+                    cumulative_distance += x_scale * math.hypot(dx, dy)
+                cumulative_by_index[index] = cumulative_distance
+                previous_index = index
+            # Participants use the projection of the configured NACA highlight
+            # point (X, Z) = (0, 0) as s=0. Project that same point onto the
+            # experimental polyline instead of anchoring s at the maximum-Cp
+            # pressure tap, which is slightly downstream of the leading edge.
+            highlight_distance = 0.0
+            best_distance_squared = float("inf")
+            for start_index, end_index in zip(ordered_indices, ordered_indices[1:]):
+                start_x = x_scale * rows[start_index][x_index]
+                start_z = x_scale * rows[start_index][ordinate_index]
+                end_x = x_scale * rows[end_index][x_index]
+                end_z = x_scale * rows[end_index][ordinate_index]
+                dx = end_x - start_x
+                dz = end_z - start_z
+                segment_length_squared = dx * dx + dz * dz
+                fraction = 0.0
+                if segment_length_squared > 0.0:
+                    fraction = max(
+                        0.0,
+                        min(1.0, -(start_x * dx + start_z * dz) / segment_length_squared),
+                    )
+                projected_x = start_x + fraction * dx
+                projected_z = start_z + fraction * dz
+                distance_squared = projected_x * projected_x + projected_z * projected_z
+                if distance_squared < best_distance_squared:
+                    best_distance_squared = distance_squared
+                    highlight_distance = cumulative_by_index[start_index] + fraction * math.sqrt(segment_length_squared)
+            # Match the submitted curves explicitly by the experimental Z
+            # ordinate: Z < 0 is the lower surface and must have negative s;
+            # Z > 0 is the upper surface and must have positive s.
+            x_values = []
+            for index, row in enumerate(rows):
+                offset = cumulative_by_index[index] - highlight_distance
+                ordinate = row[ordinate_index]
+                if ordinate < 0.0:
+                    x_values.append(-abs(offset))
+                elif ordinate > 0.0:
+                    x_values.append(abs(offset))
+                else:
+                    x_values.append(offset)
+        else:
+            x_values = [
+                x_scale * (
+                    row[x_index] * cosine
+                    - (row[ordinate_index] if ordinate_index is not None else 0.0) * sine
+                )
+                for row in rows
+            ]
+        sorted_points = sorted(zip(x_values, y_values), key=lambda point: point[0])
+        x_values = [point[0] for point in sorted_points]
+        y_values = [point[1] for point in sorted_points]
         label = str(source.get("label", "Experimental"))
 
         fig.add_trace(
@@ -779,7 +988,7 @@ def add_reference_traces(fig: go.Figure, case_id: str, grid_level: str, plot_key
                 hovertemplate=(
                     f"Source: {escape(source_path.name)}<br>"
                     f"Series: average of {escape(', '.join(y_columns))}<br>"
-                    "Rotated X=%{x:.6g} m<br>"
+                    f"{'s' if source.get('surface_distance_from_highlight') else 'Rotated X'}=%{{x:.6g}} m<br>"
                     "Cp=%{y:.6g}<extra></extra>"
                 ),
             )
@@ -819,7 +1028,15 @@ def collect_cutdata_slice_positions(participants, case_id: str, grid_level: str,
     return sorted(set(round(value, 8) for value in slice_positions))
 
 
-def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any], slice_filter: float | None = None, roughness_filter: str | None = None) -> tuple[go.Figure, int, list[float], list[str]]:
+def build_cutdata_figure(
+    participants,
+    case_id: str,
+    grid_level: str,
+    plot_spec: dict[str, Any],
+    slice_filter: float | None = None,
+    roughness_filter: str | None = None,
+    show_cp_inset: bool = True,
+) -> tuple[go.Figure, int, list[float], list[str]]:
     seen_trace_keys: set[tuple[Any, ...]] = set()
 
     fig = go.Figure()
@@ -879,6 +1096,31 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
             if data.empty:
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
+            invert_participant_019_s = (
+                case_id == "TC_ONERAM6"
+                and str(participant.participant_id).zfill(3) == "019"
+                and grid_level in {"L2", "L3", "L4"}
+                and (plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot)
+                and x_column.lower() == "s"
+            )
+            if invert_participant_019_s:
+                data[x_column] = -pd.to_numeric(data[x_column], errors="coerce")
+            if x_column.lower() == "s":
+                data = data.sort_values(x_column, kind="mergesort").reset_index(drop=True)
+            if plot_spec.get("derived_recovery_temperature"):
+                settings = HEAT_FLUX_CASE_SETTINGS.get(case_id)
+                if settings is None:
+                    skipped_note_set.add(f"No recovery-temperature settings are configured for {case_id}.")
+                    continue
+                cp_values = pd.to_numeric(data[y_column], errors="coerce").to_numpy(dtype=float)
+                t_rec_values = recovery_temperature(cp_values, settings.t_inf, settings.mach_inf)
+                valid_recovery = np.isfinite(t_rec_values)
+                data = data.loc[valid_recovery].copy()
+                if data.empty:
+                    skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide Cp values from which Trec could be calculated.")
+                    continue
+                y_column = "Trec"
+                data[y_column] = t_rec_values[valid_recovery]
             if plot_spec["plot_key"] == "freezing_fraction_vs_s":
                 data.loc[data[y_column] < 1e-9, y_column] = -1.0
             trace_name = participant_label(participant, dataset_data, grid_data)
@@ -948,11 +1190,43 @@ def build_cutdata_figure(participants, case_id: str, grid_level: str, plot_spec:
         reverse_y_axis=plot_spec.get("reverse_y_axis", False),
         y_range=plot_spec.get("y_range"),
     )
-    if is_beta_plot:
-        add_collection_efficiency_inset(fig)
+    if case_id == "TC_ONERAM6" and plot_spec["plot_key"] == "htc_vs_s":
+        fig.update_xaxes(range=[-0.4, 0.4])
+    if case_id == "TC_ONERAM6" and is_beta_plot:
+        fig.update_xaxes(range=[-0.15, 0.15])
+    if case_id.startswith("TC_NACA0012_") and (
+        plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot
+    ):
+        fig.update_xaxes(range=[-0.4, 0.4])
+    if is_beta_plot and show_cp_inset:
+        add_collection_efficiency_inset(
+            fig,
+            x_range=(
+                (-0.025, 0.025)
+                if case_id == "TC_ONERAM6"
+                else (-0.025, 0.025) if case_id.startswith("TC_NACA0012_") else None
+            ),
+        )
     if plot_spec["plot_key"] in {"cp_vs_x", "cp_vs_s"}:
-        add_attachment_line(fig)
-        add_cp_leading_edge_inset(fig)
+        attachment_x = 0.0
+        if case_id.startswith("TC_NACA0012_"):
+            attachment_x = experimental_cp_peak_x(fig) or 0.0
+        if case_id != "TC_ONERAM6":
+            add_attachment_line(fig, attachment_x)
+        inset_position = "upper_right"
+        if case_id == "TC_ONERAM6":
+            inset_position = "lower_middle" if plot_spec["plot_key"] == "cp_vs_x" else "lower_left"
+        if show_cp_inset:
+            add_cp_leading_edge_inset(
+                fig,
+                attachment_x=attachment_x if case_id != "TC_ONERAM6" else None,
+                position=inset_position,
+                y_high=(
+                    1.17
+                    if case_id == "TC_NACA0012_AE3933"
+                    else 1.08 if case_id.startswith("TC_NACA0012_") else None
+                ),
+            )
     skipped_notes = sorted(skipped_note_set)
     return fig, trace_count, slice_positions, skipped_notes
 
@@ -970,6 +1244,13 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
         details.append(format_participant_roughness_summary(roughness_summary))
     if INCLUDE_EXPERIMENTAL_DATA and plot_spec.get("plot_key") == "cp_vs_x" and case_id.startswith("TC_NACA0012_"):
         details.append("Experimental Cp markers are the pointwise average of CP_1 and CP_2 from E00_Experimental-Data/EXP_NACA0012_CP.dat; X/C and Y/C are rotated +4° about the leading edge at (0, 0) and scaled by the 0.5334 m chord.")
+    if INCLUDE_EXPERIMENTAL_DATA and plot_spec.get("plot_key") == "cp_vs_s" and case_id.startswith("TC_NACA0012_"):
+        details.append("Experimental Cp markers use the same signed curvilinear-distance convention as participant data: s = 0 is the projection of (X, Z) = (0, 0) onto the surface, with negative s on the lower surface and positive s on the upper surface.")
+    if case_id == "TC_ONERAM6" and (
+        plot_spec.get("plot_key") == "htc_vs_s"
+        or plot_spec.get("plot_key", "").startswith("beta_")
+    ):
+        details.append("For participant 019, the submitted L2-L4 HTC and Beta surface orientation is corrected by plotting against -s; Cp retains the original s orientation.")
     details.append("Legend: Participant ID.")
     return " ".join(details)
 
@@ -993,6 +1274,7 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
             data = valid_xy_rows(zone.data[[x_column, y_column]].copy(), x_column, y_column)
             if data.empty:
                 continue
+            data = data.sort_values(x_column, kind="mergesort").reset_index(drop=True)
             if slice_position is not None:
                 slice_positions.append(slice_position)
             slice_text = f"Y = {slice_position:g} m" if slice_position is not None else "unknown"
@@ -1083,17 +1365,149 @@ def build_combined_beta_section(participants, case_id: str, grid_level: str) -> 
     """
 
 
-def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec: dict[str, Any]) -> str:
+def build_participant_combined_levels_cutdata_figure(
+    participant,
+    case_id: str,
+    plot_spec: dict[str, Any],
+    slice_filter: float | None,
+) -> tuple[go.Figure, int]:
+    """Overlay one participant's L1-L4 results for one CutData variable."""
+    combined_fig: go.Figure | None = None
+    participant_trace_count = 0
+    reference_added = False
+
+    for grid_level in ("L1", "L2", "L3", "L4"):
+        level_fig, _, _, _ = build_cutdata_figure(
+            [participant],
+            case_id,
+            grid_level,
+            plot_spec,
+            slice_filter=slice_filter,
+            show_cp_inset=False,
+        )
+        if combined_fig is None:
+            combined_fig = go.Figure(level_fig)
+            combined_fig.data = ()
+
+        for trace in level_fig.data:
+            is_reference = str(trace.legendgroup).startswith("reference_")
+            if is_reference:
+                if reference_added:
+                    continue
+                reference_added = True
+            else:
+                participant_trace_count += 1
+                original_name = str(trace.name)
+                detail = original_name.split(" | ", 1)[1] if " | " in original_name else ""
+                trace.name = grid_level + (f" | {detail}" if detail else "")
+                trace.legendgroup = f"{grid_level}_{original_name}"
+                trace.line.dash = GRID_LEVEL_LINE_DASHES[grid_level]
+            combined_fig.add_trace(trace)
+
+    if combined_fig is None or participant_trace_count == 0:
+        return go.Figure(), 0
+
+    style_xy_figure(
+        combined_fig,
+        plot_spec["x_label"],
+        plot_spec["y_label"],
+        reverse_y_axis=plot_spec.get("reverse_y_axis", False),
+        height=390,
+        legend_right=False,
+    )
+    combined_fig.update_layout(
+        margin=dict(l=65, r=20, t=20, b=60),
+        showlegend=False,
+    )
+    return combined_fig, participant_trace_count
+
+
+def build_combined_levels_cutdata_section(participants, case_id: str) -> str:
+    """Build three-column participant cards with L1-L4 CutData overlaid."""
+    sections_html = ""
+    plot_specs = [
+        plot for plot in CUTDATA_PLOTS
+        if plot["plot_key"] != "beta_cards_vs_s" and plot_matches_variable_filter(plot)
+    ]
+
+    for plot_spec in plot_specs:
+        slice_positions = sorted(set(CASE_SLICES.get(case_id, []))) or [None]
+        slice_groups_html = ""
+        for slice_position in slice_positions:
+            cards_html = ""
+            for participant in participants:
+                fig, trace_count = build_participant_combined_levels_cutdata_figure(
+                    participant, case_id, plot_spec, slice_position
+                )
+                if trace_count == 0:
+                    continue
+                participant_name = participant.participant_id
+                participant_case = participant.cases.get(case_id)
+                if participant_case is not None:
+                    dataset_ids = sorted({
+                        dataset_id
+                        for grid_data in participant_case.grid_levels.values()
+                        for dataset_id in grid_data.datasets
+                    })
+                    if len(dataset_ids) == 1:
+                        participant_name = f"{participant_name}.{dataset_ids[0]}"
+                slice_slug = f"slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "slice_unknown"
+                filename = f"{slugify(case_id)}_{participant.participant_id}_{plot_spec['filename_slug']}_{slice_slug}_L1_L4"
+                figure_html = figure_to_html_div(
+                    fig,
+                    filename=filename,
+                    plot_title=f"{plot_spec['title']} | L1-L4 | Participant {participant_name}",
+                )
+                cards_html += f"""
+                <article class="combined-grid-card">
+                  <h5>Participant {escape(participant_name)}</h5>
+                  <div class="plot-container combined-grid-figure">{figure_html}</div>
+                </article>
+                """
+            if cards_html:
+                slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Available slice"
+                slice_groups_html += f"""
+                <section class="combined-grid-slice-group">
+                  <h4>{escape(slice_title)}</h4>
+                  <div class="combined-grid-matrix">{cards_html}</div>
+                </section>
+                """
+        if slice_groups_html:
+            sections_html += f"""
+            <section class="plot-subsection" data-variable-key="combined_{escape(plot_spec['plot_key'])}" data-variable-label="Combined {escape(plot_spec['title'])}">
+              <h3>{escape(plot_spec['title'])} — L1–L4 by participant</h3>
+              <p class="plot-description">Each card contains one participant with its available L1, L2, L3, and L4 curves overlaid. Grid levels are distinguished by line style; cards are arranged three per row.</p>
+              {slice_groups_html}
+            </section>
+            """
+
+    return f'<section class="plot-filter-scope combined-grid-filter-scope"><div class="variable-filter-controls" data-filter-title="Levels Combined CutData variables"></div>{sections_html}</section>' if sections_html else ""
+
+
+def build_plot_subsection(
+    participants,
+    case_id: str,
+    grid_level: str,
+    plot_spec: dict[str, Any],
+    roughness_filter_predicate=None,
+) -> str:
     slice_positions = collect_cutdata_slice_positions(participants, case_id, grid_level, bins_filter=plot_spec.get("bins_filter"))
 
     if not slice_positions:
         slice_positions = [None]
 
     figures_html = ""
+    no_roughness_figures_html = ""
+    roughness_figures_html = ""
+    group_onera_htc_by_roughness = case_id == "TC_ONERAM6" and plot_spec.get("plot_key") == "htc_vs_s"
     all_skipped_notes: list[str] = []
 
     for slice_position in slice_positions:
         roughness_keys = collect_cutdata_roughness_keys(participants, case_id, grid_level, plot_spec, slice_filter=slice_position)
+        if roughness_filter_predicate is not None:
+            roughness_keys = [key for key in roughness_keys if roughness_filter_predicate(key)]
+            if not roughness_keys:
+                continue
 
         if not roughness_keys:
             roughness_keys = [None]
@@ -1212,7 +1626,7 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
                 plot_title=f"{plot_spec['title']} | {grid_level} | {full_title}",
             )
 
-            figures_html += f"""
+            figure_card_html = f"""
             <section class="slice-plot-group">
               <h5>{escape(full_title)}</h5>
               <div class="plot-container">
@@ -1220,11 +1634,27 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
               </div>
             </section>
             """
+            if group_onera_htc_by_roughness:
+                if roughness_key == "smooth":
+                    no_roughness_figures_html += figure_card_html
+                else:
+                    roughness_figures_html += figure_card_html
+            else:
+                figures_html += figure_card_html
+
+    if group_onera_htc_by_roughness:
+        figures_html = no_roughness_figures_html + roughness_figures_html
 
     if not figures_html:
         return ""
 
     roughness_summary = collect_cutdata_participant_roughness_summary(participants, case_id, grid_level, plot_spec)
+    if roughness_filter_predicate is not None:
+        roughness_summary = {
+            participant_id: {key for key in keys if roughness_filter_predicate(key)}
+            for participant_id, keys in roughness_summary.items()
+        }
+        roughness_summary = {participant_id: keys for participant_id, keys in roughness_summary.items() if keys}
     description = build_plot_description(plot_spec, [value for value in slice_positions if value is not None], case_id, roughness_summary=roughness_summary)
 
     # A participant can have an invalid placeholder zone for one roughness/bin
@@ -1252,7 +1682,7 @@ def build_plot_subsection(participants, case_id: str, grid_level: str, plot_spec
     """
 
 
-def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) -> str:
+def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str, roughness_filter_predicate=None) -> str:
     html = ""
     for plot_spec in CUTDATA_PLOTS:
         if not plot_matches_variable_filter(plot_spec):
@@ -1262,7 +1692,13 @@ def build_grid_level_cutdata_plots(participants, case_id: str, grid_level: str) 
                 continue
             html += build_combined_beta_section(participants, case_id, grid_level)
         else:
-            html += build_plot_subsection(participants, case_id, grid_level, plot_spec)
+            html += build_plot_subsection(
+                participants,
+                case_id,
+                grid_level,
+                plot_spec,
+                roughness_filter_predicate=roughness_filter_predicate,
+            )
     if not html:
         return ""
     return f"""

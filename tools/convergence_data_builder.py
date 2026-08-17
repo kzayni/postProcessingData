@@ -7,11 +7,22 @@ from typing import Any
 import math
 import re
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
-from .gatherParticipantData import iter_case_data
+from .gatherParticipantData import (
+    CASE_SLICES,
+    decode_slice_position,
+    iter_case_data,
+    parse_ipw3_zone_name,
+)
+from .heat_flux_computations import (
+    CASE_SETTINGS as HEAT_FLUX_CASE_SETTINGS,
+    _window_with_interpolated_edges,
+    recovery_temperature,
+)
 from .participant_style import participant_color, participant_legend_rank, participant_marker
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
@@ -22,6 +33,7 @@ GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
     {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water mass [kg]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
     {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Ice mass [kg]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
     {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water evaporation mass [kg]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
 ]
 
 CFD_GRID_CONVERGENCE_PLOTS = [
@@ -40,6 +52,7 @@ OPTIONAL_ICING_DIAMETER_PLOTS: list[dict[str, Any]] = [
 
 GRID_SPACING_COLUMN = "N_NEGATIVE_ONE_THIRD"
 VARIABLE_FILTER: set[str] | None = None
+INCLUDE_QC = True
 
 
 def set_variable_filter(variables: set[str] | None) -> None:
@@ -47,12 +60,19 @@ def set_variable_filter(variables: set[str] | None) -> None:
     VARIABLE_FILTER = variables
 
 
+def set_include_qc(include: bool) -> None:
+    global INCLUDE_QC
+    INCLUDE_QC = include
+
+
 def plot_matches_variable_filter(plot_spec: dict[str, Any]) -> bool:
     if VARIABLE_FILTER is None:
         return True
     plot_key = plot_spec["plot_key"].lower()
     aliases = {plot_key, plot_key.removesuffix("_vs_n"), plot_key.replace("_by_diameter_vs_n", "")}
-    if plot_key.startswith("water_evap_mass"):
+    if plot_key == "qc_prime":
+        aliases.update({"qc", "q_c", "q_c_prime", "integrated_convective_heat_transfer"})
+    elif plot_key.startswith("water_evap_mass"):
         aliases.update({"evaporation", "water_evaporation", "water_evap_mass"})
     elif plot_key.startswith("water_mass"):
         aliases.update({"water", "water_mass"})
@@ -558,7 +578,145 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
     return fig, trace_count, skipped_notes
 
 
+def build_qc_prime_integration_figure(
+    participants,
+    case_id: str,
+    slice_position: float | None = None,
+) -> tuple[go.Figure, int, list[str]]:
+    """Integrate submitted HTC/Ts cut data for one slice and plot grid convergence."""
+    fig = go.Figure()
+    trace_count = 0
+    skipped_notes: list[str] = []
+    settings = HEAT_FLUX_CASE_SETTINGS.get(case_id)
+    cell_counts = grid_cell_counts_for_case(case_id)
+    if settings is None or not cell_counts:
+        return fig, trace_count, skipped_notes
+
+    for participant, case_data in iter_case_data(participants, case_id):
+        values: list[tuple[float, float, str, str]] = []
+        for grid_level, grid_data in sorted(case_data.grid_levels.items()):
+            level_number = grid_level_number_from_value(grid_level)
+            num_cells = cell_counts.get(level_number) if level_number is not None else None
+            if num_cells is None:
+                continue
+            for dataset_id, dataset_data in sorted(grid_data.datasets.items()):
+                path = dataset_data.cut_data_file
+                cut_data = dataset_data.cut_data
+                if path is None or cut_data is None:
+                    continue
+                value = None
+                reason = "no zone with valid s, Cp, HTC, and Ts values"
+                t_inf = settings.t_inf
+                # HTC and Ts are repeated for each droplet-bin zone. Integrate
+                # the first usable zone at the requested slice so each dataset
+                # contributes once.
+                for zone in cut_data.zones.values():
+                    if slice_position is not None:
+                        zone_info = parse_ipw3_zone_name(zone.name)
+                        zone_slice = (
+                            decode_slice_position(zone_info["slice"])
+                            if zone_info is not None and zone_info["type"] == "SLICE"
+                            else None
+                        )
+                        if zone_slice is None or not math.isclose(
+                            zone_slice, slice_position, rel_tol=0.0, abs_tol=1.0e-6
+                        ):
+                            continue
+                    s_column = find_column_case_insensitive(zone.data.columns, ["s"])
+                    htc_column = find_column_case_insensitive(zone.data.columns, ["HTC", "HeatTransferCoefficient"])
+                    ts_column = find_column_case_insensitive(zone.data.columns, ["Ts", "WallTemperature", "SurfaceTemperature"])
+                    cp_column = find_column_case_insensitive(zone.data.columns, ["Cp", "PressureCoefficient"])
+                    if s_column is None or htc_column is None or ts_column is None or cp_column is None:
+                        continue
+                    data = valid_numeric_rows(zone.data, s_column, htc_column, ts_column, cp_column)
+                    if len(data) < 2:
+                        continue
+                    s = pd.to_numeric(data[s_column], errors="coerce").to_numpy(dtype=float)
+                    htc = pd.to_numeric(data[htc_column], errors="coerce").to_numpy(dtype=float)
+                    ts = pd.to_numeric(data[ts_column], errors="coerce").to_numpy(dtype=float)
+                    cp = pd.to_numeric(data[cp_column], errors="coerce").to_numpy(dtype=float)
+                    t_rec = recovery_temperature(cp, t_inf, settings.mach_inf)
+                    valid_recovery = np.isfinite(t_rec)
+                    s, htc, ts, t_rec = s[valid_recovery], htc[valid_recovery], ts[valid_recovery], t_rec[valid_recovery]
+                    q = htc * (ts - t_rec)
+                    window_s, window_q = _window_with_interpolated_edges(s, q, settings.ds_min, settings.ds_max)
+                    if len(window_s) >= 2:
+                        value = float(np.trapezoid(window_q, window_s))
+                        reason = None
+                        break
+                if value is None:
+                    skipped_notes.append(
+                        f"Participant ID {participant.participant_id}, {grid_level} {dataset_id}: {reason}."
+                    )
+                    continue
+                values.append((num_cells ** (-1.0 / 3.0), value, grid_level, dataset_id))
+
+        if not values:
+            continue
+        values.sort(key=lambda item: item[0])
+        multiple_datasets = len({item[3] for item in values}) > 1
+        for dataset_id in sorted({item[3] for item in values}):
+            dataset_values = [item for item in values if item[3] == dataset_id]
+            if not dataset_values:
+                continue
+            label = participant_label(participant)
+            trace_name = f"{label} | {dataset_id}" if multiple_datasets else label
+            fig.add_trace(go.Scatter(
+                x=[item[0] for item in dataset_values],
+                y=[item[1] for item in dataset_values],
+                mode="lines+markers",
+                name=trace_name,
+                legendgroup=trace_name,
+                legendrank=participant_legend_rank(participant.participant_id),
+                line=dict(color=participant_color(participant.participant_id)),
+                marker=participant_marker(participant.participant_id),
+                customdata=[[item[2], item[3]] for item in dataset_values],
+                hovertemplate=(
+                    f"Participant: {escape(label)}<br>"
+                    "Grid level=%{customdata[0]}<br>"
+                    "Dataset=%{customdata[1]}<br>"
+                    "N^(-1/3)=%{x:.6g}<br>"
+                    "Q_c'=%{y:.6g} W/m<extra></extra>"
+                ),
+            ))
+            trace_count += 1
+
+    style_xy_figure(fig, "N<sup>-1/3</sup> [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
+    style_grid_level_x_axis(fig, case_id)
+    fig.update_yaxes(autorange="reversed")
+    return fig, trace_count, skipped_notes
+
+
 def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> str:
+    if plot_spec.get("qc_prime_integration_plot", False):
+        settings = HEAT_FLUX_CASE_SETTINGS[case_id]
+        window = f"ds = {settings.ds_min if settings.ds_min is not None else 'data minimum'} to {settings.ds_max if settings.ds_max is not None else 'data maximum'} m"
+        subsections: list[str] = []
+        slice_positions = CASE_SLICES.get(case_id) or [None]
+        for slice_position in slice_positions:
+            fig, trace_count, skipped_notes = build_qc_prime_integration_figure(
+                participants, case_id, slice_position=slice_position
+            )
+            if trace_count == 0:
+                continue
+            slice_label = f"Y = {slice_position:g} m" if slice_position is not None else "submitted slice"
+            slice_slug = f"_y_{slice_position:g}" if slice_position is not None else ""
+            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}{slice_slug}"
+            title = f"{plot_spec['title']} | {slice_label}"
+            figure_html = figure_to_html_div(fig, filename=filename, plot_title=title)
+            notes_html = ""
+            if skipped_notes:
+                notes_html = '<ul class="plot-notes">' + "".join(f"<li>{escape(note)}</li>" for note in sorted(set(skipped_notes))) + "</ul>"
+            subsections.append(f"""
+        <section class="plot-subsection" data-variable-key="qc_prime" data-variable-label="Integrated convective heat transfer per unit span">
+          <h4>{escape(title)}</h4>
+          <p class="plot-description">Slice {escape(slice_label)}. Signed trapezoidal integration of HTC (Ts − Trec) over {escape(window)}, with Trec approximated pointwise from Cp (γ = 1.4, r = 0.9, M∞ = {settings.mach_inf:g}); the Y-axis is reversed as for Cp. Legend: Participant ID.</p>
+          {notes_html}
+          <div class="plot-container">{figure_html}</div>
+        </section>
+            """)
+        return "".join(subsections)
+
     if plot_spec.get("diameter_plot", False):
         return build_grid_convergence_diameter_subsection(participants, case_id, plot_spec, requirement=requirement)
 
@@ -608,8 +766,16 @@ def build_grid_convergence_section(participants, case_id: str, category: str = "
     }.get(category)
     if plot_specs is None:
         raise ValueError(f"Unknown grid-convergence category: {category}")
+    if category != "cfd":
+        plot_specs = [
+            plot_spec for plot_spec in plot_specs
+            if not plot_spec.get("qc_prime_integration_plot", False)
+        ]
     if category == "icing" and requirement == "optional":
-        plot_specs = [*plot_specs, *OPTIONAL_ICING_DIAMETER_PLOTS]
+        plot_specs = [
+            *[plot_spec for plot_spec in plot_specs if not plot_spec.get("qc_prime_integration_plot", False)],
+            *OPTIONAL_ICING_DIAMETER_PLOTS,
+        ]
     if metric is not None:
         metric_plot_keys = {
             "water": {"water_mass_vs_n", "water_mass_by_diameter_vs_n"},

@@ -1,14 +1,15 @@
 TITLE = "cutData curvilinear distance mapping"
+AUXDATA SMAP_VERSION = "signed-common-frame-z-surface-v10"
 VARIABLES = "s" "variable Index"
 
 ZONE T="SLICE_Y_0p9144_BINS01_KS_XXmm_CUTDATA"
-0 0
+-0 0
 
 ZONE T="SLICE_Y_0p9144_BINS03_KS_XXmm_CUTDATA"
-0 0
+-0 0
 
 ZONE T="SLICE_Y_0p9144_BINS07_KS_XXmm_CUTDATA"
-0 0
+-0 0
 
 ZONE T="SLICE_Y_0p9144_BINS15_KS_XXmm_CUTDATA"
-0 0
+-0 0

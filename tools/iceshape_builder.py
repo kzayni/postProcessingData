@@ -15,6 +15,8 @@ import plotly.io as pio
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
 from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
 
+GRID_LEVEL_LINE_DASHES = {"L1": "solid", "L2": "dash", "L3": "dot", "L4": "dashdot"}
+
 
 # Central place to tune ice-shape figure axes.
 # Settings can be defined globally, per case, and per slice.
@@ -109,7 +111,7 @@ def set_variable_filter(variables: set[str] | None) -> None:
 EXPERIMENTAL_ICE_SHAPE_STYLES = {
     "TC_NACA0012_AE3932": {
         "MAXCCS": {
-            "show_contour": True,
+            "show_contour": False,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -121,17 +123,17 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
         },
         "MEANCCS": {
             "show_contour": True,
-            "show_markers": False,
+            "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
             "line_width": 3,
             "line_dash": "solid",
             "marker_size": 8,
             "marker_symbol": "square",
-            "marker_frequency": 1,
+            "marker_frequency": 25,
         },
         "MINCCS": {
-            "show_contour": True,
+            "show_contour": False,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -144,7 +146,7 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
     },
     "TC_NACA0012_AE3933": {
         "MAXCCS": {
-            "show_contour": True,
+            "show_contour": False,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -156,17 +158,17 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
         },
         "MEANCCS": {
             "show_contour": True,
-            "show_markers": False,
+            "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
             "line_width": 3,
             "line_dash": "solid",
             "marker_size": 8,
             "marker_symbol": "square",
-            "marker_frequency": 1,
+            "marker_frequency": 25,
         },
         "MINCCS": {
-            "show_contour": True,
+            "show_contour": False,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
@@ -802,13 +804,13 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
             for point_index in range(int(valid.sum()))
         ]
         contour_label = {
-            "MAXCCS": "Max",
-            "MEANCCS": "Mean",
-            "MINCCS": "Min",
+            "MAXCCS": "MaxCCS",
+            "MEANCCS": "MeanCCS",
+            "MINCCS": "MinCCS",
         }.get(normalized_zone_name, zone_name)
         legend_rank = {
-            "MAXCCS": 1000,
-            "MEANCCS": 1001,
+            "MEANCCS": 1000,
+            "MAXCCS": 1001,
             "MINCCS": 1002,
         }.get(normalized_zone_name, 1002)
 
@@ -850,6 +852,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
 
     Important distinction:
         - SINGLE_LAYER zones from finalIceShape / iceShape files are drawn here.
+        - Participant 013's FINAL_LAYER submission is classified as single-layer.
         - FINAL_LAYER zones are drawn separately by the multi-layer/final plot.
 
     The plot is always X-Z:
@@ -865,8 +868,16 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
         if dataset_data.ice_shape_data is None:
             continue
 
+        participant_id = str(participant.participant_id).zfill(3)
         label = participant_label(participant, dataset_data, grid_data)
         color = participant_color(participant.participant_id)
+        force_naca_single_layer = (
+            "NACA0012" in case_id.upper() and participant_id in {"006", "020"}
+        )
+        has_submitted_single_layer = any(
+            (parse_ipw3_ice_shape_zone_name(candidate_name) or {}).get("shape_role") == "SINGLE_LAYER"
+            for candidate_name in dataset_data.ice_shape_data.zones
+        )
 
         for zone_index, (zone_name, zone) in enumerate(dataset_data.ice_shape_data.zones.items(), start=1):
             zone_info = parse_ipw3_ice_shape_zone_name(zone_name)
@@ -894,7 +905,14 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 slice_text = "unknown"
                 slice_position = None
 
-            if shape_role != "SINGLE_LAYER":
+            is_single_layer = shape_role == "SINGLE_LAYER" or (
+                participant_id == "013" and shape_role == "FINAL_LAYER"
+            ) or (
+                force_naca_single_layer
+                and not has_submitted_single_layer
+                and shape_role == "FINAL_LAYER"
+            )
+            if not is_single_layer:
                 continue
             if bins_filter is not None and bins_id != bins_filter:
                 continue
@@ -970,6 +988,11 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
     slice_positions: list[float] = []
 
     for participant, case_data, grid_data, dataset_data in iter_grid_data(participants, case_id, grid_level):
+        participant_id = str(participant.participant_id).zfill(3)
+        if participant_id in {"002", "013"} or (
+            "NACA0012" in case_id.upper() and participant_id in {"006", "020"}
+        ):
+            continue
         if dataset_data.ice_shape_data is None:
             continue
 
@@ -1048,7 +1071,125 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
     return fig, trace_count, slice_positions
 
 
-def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
+def build_participant_combined_levels_ice_figure(
+    participant,
+    case_id: str,
+    shape_kind: str,
+    slice_filter: float | None,
+    bins_filter: str | None,
+    roughness_filter: str | None,
+) -> tuple[go.Figure, int]:
+    """Overlay one participant's L1-L4 ice shapes in a compact card."""
+    builder = build_single_layer_ice_shape_figure if shape_kind == "single" else build_multilayer_ice_shape_figure
+    combined_fig: go.Figure | None = None
+    participant_trace_count = 0
+    reference_groups: set[str] = set()
+
+    for grid_level in ("L1", "L2", "L3", "L4"):
+        level_fig, level_trace_count, _ = builder(
+            [participant], case_id, grid_level,
+            slice_filter=slice_filter,
+            bins_filter=bins_filter,
+            roughness_filter=roughness_filter,
+        )
+        if combined_fig is None:
+            combined_fig = go.Figure(level_fig)
+            combined_fig.data = ()
+
+        for trace_index, trace in enumerate(level_fig.data):
+            if trace_index < level_trace_count:
+                participant_trace_count += 1
+                original_name = str(trace.name)
+                detail = re.sub(rf"^{re.escape(participant.participant_id)}(?:\.[^ |]+)?\s*", "", original_name).lstrip(" |")
+                trace.name = grid_level + (f" | {detail}" if detail else "")
+                trace.legendgroup = f"{grid_level}_{original_name}"
+                trace.line.dash = GRID_LEVEL_LINE_DASHES[grid_level]
+            else:
+                reference_group = str(trace.legendgroup)
+                if reference_group in reference_groups:
+                    continue
+                reference_groups.add(reference_group)
+            combined_fig.add_trace(trace)
+
+    if combined_fig is None or participant_trace_count == 0:
+        return go.Figure(), 0
+
+    combined_fig.update_layout(
+        height=390,
+        margin=dict(l=65, r=20, t=20, b=60),
+        showlegend=False,
+    )
+    return combined_fig, participant_trace_count
+
+
+def build_combined_levels_ice_shape_section(participants, case_id: str, shape_kind_filter: str | None = None) -> str:
+    """Build three-column participant matrices for all available ice shapes."""
+    if VARIABLE_FILTER is not None and not VARIABLE_FILTER.intersection({"ice_shape", "iceshape", "shape"}):
+        return ""
+
+    slices = expected_slice_positions(case_id)
+    bins = sorted({
+        bins_id
+        for grid_level in ("L1", "L2", "L3", "L4")
+        for bins_id in detected_ice_shape_bins(participants, case_id, grid_level)
+    }) or ["BINSXX"]
+    if "NACA0012" in case_id.upper():
+        roughness_values: list[str | None] = [None]
+    else:
+        roughness_values = sorted({
+            roughness
+            for grid_level in ("L1", "L2", "L3", "L4")
+            for roughness in detected_ice_shape_roughness_keys(participants, case_id, grid_level)
+        }) or [None]
+
+    sections_html = ""
+    for shape_kind, shape_title in (("single", "Single-layer ice shape"), ("multi", "Multi-layer final ice shape")):
+        if shape_kind_filter is not None and shape_kind != shape_kind_filter:
+            continue
+        configurations_html = ""
+        for slice_position in slices:
+            for bins_id in bins:
+                for roughness_filter in roughness_values:
+                    cards_html = ""
+                    for participant in participants:
+                        fig, trace_count = build_participant_combined_levels_ice_figure(
+                            participant, case_id, shape_kind, slice_position, bins_id, roughness_filter
+                        )
+                        if trace_count == 0:
+                            continue
+                        slice_slug = f"slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "slice_unknown"
+                        filename = f"{slugify(case_id)}_{participant.participant_id}_{shape_kind}_ice_{slice_slug}_{slugify(bins_id)}_{slugify(roughness_filter or 'all')}_L1_L4"
+                        figure_html = figure_to_html_div(
+                            fig, filename=filename,
+                            plot_title=f"{shape_title} | L1-L4 | Participant {participant.participant_id}",
+                        )
+                        cards_html += f"""
+                        <article class="combined-grid-card">
+                          <h5>Participant {escape(participant.participant_id)}</h5>
+                          <div class="plot-container combined-grid-figure">{figure_html}</div>
+                        </article>
+                        """
+                    if cards_html:
+                        slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Available slice"
+                        roughness_title = "All roughness heights" if roughness_filter is None else format_roughness_title(roughness_filter)
+                        configurations_html += f"""
+                        <section class="combined-grid-slice-group">
+                          <h4>{escape(f'{slice_title} | {bins_id} | {roughness_title}')}</h4>
+                          <div class="combined-grid-matrix">{cards_html}</div>
+                        </section>
+                        """
+        if configurations_html:
+            sections_html += f"""
+            <section id="combined-{shape_kind}-ice-shape" class="plot-subsection" data-variable-key="combined_{shape_kind}_ice_shape" data-variable-label="Combined {escape(shape_title)}">
+              <h3>{escape(shape_title)} — L1–L4 by participant</h3>
+              <p class="plot-description">Each card contains one participant with its available L1, L2, L3, and L4 ice shapes overlaid. Grid levels are distinguished by line style; cards are arranged three per row.</p>
+              {configurations_html}
+            </section>
+            """
+    return f'<section class="plot-filter-scope combined-grid-filter-scope"><div class="variable-filter-controls" data-filter-title="Levels Combined ice-shape views"></div>{sections_html}</section>' if sections_html else ""
+
+
+def build_ice_shape_section(participants, case_id: str, grid_level: str, shape_kind_filter: str | None = None, roughness_filter_predicate=None) -> str:
     """Build both ice-shape figures for one case/grid level.
 
     This section contains:
@@ -1066,27 +1207,43 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     if not configured_bins:
         configured_bins = ["BINSXX"]
     configured_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level)
+    if roughness_filter_predicate is not None:
+        configured_roughness = [key for key in configured_roughness if roughness_filter_predicate(key)]
     if not configured_roughness:
         configured_roughness = [None]
     combine_roughness = "NACA0012" in case_id.upper()
 
-    for slice_position in configured_slices:
+    if case_id == "TC_ONERAM6":
+        slice_bin_pairs = (
+            (slice_position, bins_id)
+            for bins_id in configured_bins
+            for slice_position in configured_slices
+        )
+    else:
+        slice_bin_pairs = (
+            (slice_position, bins_id)
+            for slice_position in configured_slices
+            for bins_id in configured_bins
+        )
+
+    for slice_position, bins_id in slice_bin_pairs:
         slice_title = f"Y = {slice_position:g} m" if slice_position is not None else "Slice unknown"
         slice_slug = f"_slice_{slice_position:g}".replace(".", "p") if slice_position is not None else "_slice_unknown"
 
-        for bins_id in configured_bins:
-            bins_slug = f"_{bins_id.lower()}"
-            if combine_roughness:
-                # NACA0012 participants commonly supplied more than one valid
-                # roughness height. Overlay them in one comparison instead of
-                # hiding each height behind a separate filter/card.
+        bins_slug = f"_{bins_id.lower()}"
+        if combine_roughness:
+            # NACA0012 participants commonly supplied more than one valid
+            # roughness height. Overlay them in one comparison instead of
+            # hiding each height behind a separate filter/card.
+            figure_roughness = [None]
+        else:
+            figure_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
+            if roughness_filter_predicate is not None:
+                figure_roughness = [key for key in figure_roughness if roughness_filter_predicate(key)]
+            if not figure_roughness:
                 figure_roughness = [None]
-            else:
-                figure_roughness = detected_ice_shape_roughness_keys(participants, case_id, grid_level, slice_filter=slice_position, bins_filter=bins_id)
-                if not figure_roughness:
-                    figure_roughness = [None]
 
-            for roughness_key in figure_roughness:
+        for roughness_key in figure_roughness:
                 roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
                 roughness_title = "All roughness heights" if combine_roughness else format_roughness_title(roughness_key)
                 bin_title = f"{slice_title} | {bins_id} | {roughness_title}"
@@ -1134,7 +1291,16 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     configured_slice_text = format_slice_positions([value for value in configured_slices if value is not None])
     configured_bins_text = ", ".join(configured_bins)
     configured_roughness_text = ", ".join(format_roughness_title(value) for value in configured_roughness)
-    participant_roughness_text = format_participant_roughness_summary(collect_ice_shape_participant_roughness_summary(participants, case_id, grid_level))
+    participant_roughness_summary = collect_ice_shape_participant_roughness_summary(participants, case_id, grid_level)
+    if roughness_filter_predicate is not None:
+        participant_roughness_summary = {
+            participant_id: {key for key in keys if roughness_filter_predicate(key)}
+            for participant_id, keys in participant_roughness_summary.items()
+        }
+        participant_roughness_summary = {
+            participant_id: keys for participant_id, keys in participant_roughness_summary.items() if keys
+        }
+    participant_roughness_text = format_participant_roughness_summary(participant_roughness_summary)
     experimental_description = (
         "For the NACA0012 cases, the corresponding maximum, mean, and minimum experimental contours are drawn from E00_Experimental-Data. "
         if INCLUDE_EXPERIMENTAL_DATA
@@ -1164,9 +1330,9 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
     )
 
     single_section_html = ""
-    if single_figures_html:
+    if single_figures_html and shape_kind_filter in {None, "single"}:
         single_section_html = f"""
-        <section class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
+        <section id="single-layer-ice-shape" class="plot-subsection ice-shape-subsection" data-variable-key="single_layer_ice_shape" data-variable-label="Single-layer ice shape">
           <h4>Single-layer ice shape</h4>
           <p class="plot-description">{escape(single_description)}</p>
           {single_figures_html}
@@ -1174,9 +1340,9 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
         """
 
     multi_section_html = ""
-    if multi_figures_html:
+    if multi_figures_html and shape_kind_filter in {None, "multi"}:
         multi_section_html = f"""
-        <section class="plot-subsection ice-shape-subsection" data-variable-key="multi_layer_final_ice_shape" data-variable-label="Multi-layer final ice shape">
+        <section id="multi-layer-ice-shape" class="plot-subsection ice-shape-subsection" data-variable-key="multi_layer_final_ice_shape" data-variable-label="Multi-layer final ice shape">
           <h4>Multi-layer final ice shape</h4>
           <p class="plot-description">{escape(multi_description)}</p>
           {multi_figures_html}
@@ -1188,10 +1354,10 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str) -> str:
 
     return f"""
     <section class="plot-filter-scope ice-shape-filter-scope">
-    <h3>Ice shape</h3>
-    <div class="variable-filter-controls" data-filter-title="Ice-shape variables"></div>
-    <div class="variable-filter-controls ice-shape-filter-controls"></div>
-    {single_section_html}
-    {multi_section_html}
+      <h3>Ice shape</h3>
+      <div class="variable-filter-controls" data-filter-title="Ice-shape variables"></div>
+      <div class="variable-filter-controls ice-shape-filter-controls"></div>
+      {single_section_html}
+      {multi_section_html}
     </section>
     """

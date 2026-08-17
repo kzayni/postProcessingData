@@ -665,6 +665,36 @@ def curvilinear_mapping_path(cutdata_path: Path) -> Path:
     return cutdata_path.with_name(f"{cutdata_path.stem}_sMap.dat")
 
 
+SMAP_VERSION = "signed-common-frame-z-surface-v10"
+
+
+def uses_rotated_naca_submission_frame(path: Path, case_id: str | None) -> bool:
+    """Return whether a NACA cut must be returned from the submitted -4° frame."""
+    resolved_case_id = (case_id or extract_case_id_from_name(path.name) or "").upper()
+    participant_001 = any(parent.name.startswith("001_") for parent in path.parents)
+    return "NACA0012" in resolved_case_id and not participant_001
+
+
+def add_naca_reference_s_mapping_coordinates(
+    dataframe: pd.DataFrame,
+    x_column: str,
+    y_column: str,
+    z_column: str,
+) -> tuple[pd.DataFrame, str, str, str]:
+    """Rotate submitted NACA coordinates +4° about quarter chord for s calculation."""
+    output = dataframe.copy()
+    angle = math.radians(4.0)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    quarter_chord_x = 0.13335
+    relative_x = output[x_column].astype(float) - quarter_chord_x
+    z_values = output[z_column].astype(float)
+    output["__smap_x__"] = quarter_chord_x + relative_x * cosine - z_values * sine
+    output["__smap_y__"] = output[y_column].astype(float)
+    output["__smap_z__"] = relative_x * sine + z_values * cosine
+    return output, "__smap_x__", "__smap_y__", "__smap_z__"
+
+
 def resolve_highlight_point(case_id: str | None, path: Path, dataframe: pd.DataFrame, x_column: str, y_column: str, z_column: str, highlight_points_by_case: HighlightPointsByCase | None) -> tuple[float, float, float]:
     """Return the case highlight point as X, Y, Z, filling slice-dependent coordinates."""
     resolved_case_id = case_id or extract_case_id_from_name(path.name)
@@ -742,23 +772,39 @@ def add_curvilinear_distance_to_zone(path: Path, zone: ZoneData, case_id: str | 
 
     working_data = zone.data.copy()
     working_data["__variable_index__"] = list(range(len(working_data)))
-    ordered_data = order_surface_points(working_data, x_column, y_column, z_column)
-    highlight = resolve_highlight_point(case_id, path, ordered_data, x_column, y_column, z_column, highlight_points_by_case)
-    ordered_data = rotate_surface_order_from_farthest_point(ordered_data, x_column, y_column, z_column, highlight)
+    mapping_x, mapping_y, mapping_z = x_column, y_column, z_column
+    if uses_rotated_naca_submission_frame(path, case_id):
+        working_data, mapping_x, mapping_y, mapping_z = add_naca_reference_s_mapping_coordinates(
+            working_data, x_column, y_column, z_column
+        )
+    ordered_data = order_surface_points(working_data, mapping_x, mapping_y, mapping_z)
+    highlight = resolve_highlight_point(case_id, path, ordered_data, mapping_x, mapping_y, mapping_z, highlight_points_by_case)
+    ordered_data = rotate_surface_order_from_farthest_point(ordered_data, mapping_x, mapping_y, mapping_z, highlight)
     points = list(
         zip(
-            ordered_data[x_column].astype(float),
-            ordered_data[y_column].astype(float),
-            ordered_data[z_column].astype(float),
+            ordered_data[mapping_x].astype(float),
+            ordered_data[mapping_y].astype(float),
+            ordered_data[mapping_z].astype(float),
         )
     )
     distances = cumulative_distances(points)
     highlight_distance = projected_distance_on_polyline(points, distances, highlight)
 
-    s_values = [distance - highlight_distance for distance in distances]
+    unsigned_offsets = [distance - highlight_distance for distance in distances]
+    surface_ordinates = ordered_data[mapping_z].astype(float).tolist()
+    ordinate_tolerance = max(1.0, max((abs(value) for value in surface_ordinates), default=0.0)) * 1.0e-12
+    s_values = []
+    for offset, ordinate in zip(unsigned_offsets, surface_ordinates):
+        if ordinate < -ordinate_tolerance:
+            s_values.append(-abs(offset))
+        elif ordinate > ordinate_tolerance:
+            s_values.append(abs(offset))
+        else:
+            s_values.append(offset)
     ordered_data["s"] = s_values
     variable_indices = [int(value) for value in ordered_data["__variable_index__"]]
-    zone.data = ordered_data.drop(columns=["__variable_index__"])
+    drop_columns = ["__variable_index__", "__smap_x__", "__smap_y__", "__smap_z__"]
+    zone.data = ordered_data.drop(columns=[column for column in drop_columns if column in ordered_data])
     zone.auxdata["HIGHLIGHT_X"] = f"{highlight[0]:.12g}"
     zone.auxdata["HIGHLIGHT_Y"] = f"{highlight[1]:.12g}"
     zone.auxdata["HIGHLIGHT_Z"] = f"{highlight[2]:.12g}"
@@ -798,6 +844,7 @@ def write_curvilinear_mapping_file(path: Path, data: TecplotData, mappings: dict
     """Write the sidecar s mapping file in a Tecplot-like format."""
     lines = [
         'TITLE = "cutData curvilinear distance mapping"',
+        f'AUXDATA SMAP_VERSION = "{SMAP_VERSION}"',
         'VARIABLES = "s" "variable Index"',
         "",
     ]
@@ -815,10 +862,12 @@ def write_curvilinear_mapping_file(path: Path, data: TecplotData, mappings: dict
 def add_curvilinear_distance_to_cutdata(data: TecplotData, case_id: str | None = None, highlight_points_by_case: HighlightPointsByCase | None = None, clean_s_cache: bool = False) -> None:
     """Add computed curvilinear distance to every zone in a cutData file."""
     mapping_path = curvilinear_mapping_path(data.path)
-
     if not clean_s_cache and mapping_path.exists():
         mapping_data = read_tecplot_dat(mapping_path, process_cutdata=False)
-        if apply_curvilinear_mapping_to_cutdata(data, mapping_data):
+        if (
+            mapping_data.auxdata.get("SMAP_VERSION") == SMAP_VERSION
+            and apply_curvilinear_mapping_to_cutdata(data, mapping_data)
+        ):
             return
 
         print(f"Warning: ignored stale s mapping file: {mapping_path}")
@@ -1616,13 +1665,21 @@ def attach_file_to_participant(participant: Participant, file_path: Path, defaul
         grid_data = case_data.get_or_create_grid_level(grid_level)
         dataset_data = grid_data.get_or_create_dataset(dataset_id, path=file_path.parent)
 
-        # Participant 015 supplied Cp/Beta again on their correct coordinate
-        # surface. Keep that file beside the regular cutData submission so the
-        # plotting layer can use it only for Cp and Beta.
+        # Some participants supplied Cp (or Cp/Beta) in a separate cutData
+        # file. Keep it beside the regular submission so the plotting layer
+        # uses it only for the variables it supplements.
         if (
             file_type == "cutData"
-            and participant.participant_id == "015"
-            and re.search(r"_cutData_Cp_Beta_", file_path.name, re.IGNORECASE)
+            and (
+                (
+                    participant.participant_id == "013"
+                    and re.search(r"_cutData_Cp_", file_path.name, re.IGNORECASE)
+                )
+                or (
+                    participant.participant_id == "015"
+                    and re.search(r"_cutData_Cp_Beta_", file_path.name, re.IGNORECASE)
+                )
+            )
         ):
             dataset_data.cp_beta_cut_data_file = file_path
         elif file_type == "cutData":
