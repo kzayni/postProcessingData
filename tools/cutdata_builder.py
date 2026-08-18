@@ -213,7 +213,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     {
         "plot_key": "freezing_fraction_vs_s",
         "title": "Freezing fraction vs s",
-        "description": "Freezing fraction along the selected surface cut(s). Values below 1e-9 are shown as -1.0, following the adopted missing/negligible-value convention.",
+        "description": "Freezing fraction along the selected surface cut(s).",
         "x_candidates": ["s", "S"],
         "y_candidates": ["FF", "FreezingFraction"],
         "x_label": "Surface distance from highlight [m]",
@@ -1122,7 +1122,7 @@ def build_cutdata_figure(
                 y_column = "Trec"
                 data[y_column] = t_rec_values[valid_recovery]
             if plot_spec["plot_key"] == "freezing_fraction_vs_s":
-                data.loc[data[y_column] < 1e-9, y_column] = -1.0
+                data.loc[data[y_column] < 0.0, y_column] = 0.0
             trace_name = participant_label(participant, dataset_data, grid_data)
             if "NACA0012" in case_id.upper():
                 trace_name = f"{trace_name} | {format_roughness_title(roughness_key)}"
@@ -1190,6 +1190,8 @@ def build_cutdata_figure(
         reverse_y_axis=plot_spec.get("reverse_y_axis", False),
         y_range=plot_spec.get("y_range"),
     )
+    if plot_spec["plot_key"] == "freezing_fraction_vs_s":
+        fig.update_xaxes(range=[-0.4, 0.4])
     if case_id == "TC_ONERAM6" and plot_spec["plot_key"] == "htc_vs_s":
         fig.update_xaxes(range=[-0.4, 0.4])
     if case_id == "TC_ONERAM6" and is_beta_plot:
