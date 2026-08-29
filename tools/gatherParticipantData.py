@@ -49,7 +49,7 @@ VALID_GRID_LEVELS = {"L1", "L2", "L3", "L4"}
 HighlightPoint = tuple[Optional[float], Optional[float], Optional[float]]
 HighlightPointsByCase = dict[str, HighlightPoint]
 DEFAULT_CUTDATA_HIGHLIGHT_POINT: HighlightPoint = (0.0, None, 0.0)
-NACA0012_ROTATION_DEGREES = 4.0
+NACA0012_ROTATION_DEGREES = 4.1
 NACA0012_ROTATION_CENTER_X = 0.13335
 
 
@@ -917,7 +917,7 @@ def write_tecplot_data(path: Path, data: TecplotData) -> None:
 
 
 def rotate_naca0012_ice_shape(data: TecplotData) -> None:
-    """Rotate all available clean/iced X-Z coordinate pairs by +4 degrees."""
+    """Rotate all available clean/iced X-Z coordinate pairs by the configured angle."""
     angle = math.radians(NACA0012_ROTATION_DEGREES)
     cosine = math.cos(angle)
     sine = math.sin(angle)
@@ -953,13 +953,16 @@ def rotated_ice_shape_path_for_plotting(path: Path, case_id: str | None, clean_c
         # FELINESEG sidecars created by older versions lost element
         # connectivity. Rebuild those once; current sidecars carry this marker.
         source_uses_felineseg = tecplot_header_contains(path, "ZONETYPE=FELINESEG")
-        if not source_uses_felineseg or tecplot_header_contains(output_path, FELINESEG_EXPANDED_AUXDATA):
+        expected_rotation_marker = f"rotated +{NACA0012_ROTATION_DEGREES:g} degrees"
+        rotation_is_current = tecplot_header_contains(output_path, expected_rotation_marker)
+        connectivity_is_current = not source_uses_felineseg or tecplot_header_contains(output_path, FELINESEG_EXPANDED_AUXDATA)
+        if rotation_is_current and connectivity_is_current:
             return output_path
 
     data = read_tecplot_dat(path, process_cutdata=False)
     rotate_naca0012_ice_shape(data)
     data.path = output_path
-    data.title = f"{data.title or path.stem} | NACA0012 coordinates rotated +4 degrees about X=0.13335 m"
+    data.title = f"{data.title or path.stem} | NACA0012 coordinates rotated +{NACA0012_ROTATION_DEGREES:g} degrees about X={NACA0012_ROTATION_CENTER_X:g} m"
     write_tecplot_data(output_path, data)
     return output_path
 

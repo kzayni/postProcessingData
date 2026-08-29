@@ -23,6 +23,7 @@ try:
         participant_marker,
         participant_trace_mode,
     )
+    from .plot_style import GRID_CONVERGENCE_NORMALIZATION, apply_xy_style
 except ImportError:  # Allow ``python3 tools/heat_flux_computations.py``.
     from participant_style import (
         participant_color,
@@ -30,6 +31,7 @@ except ImportError:  # Allow ``python3 tools/heat_flux_computations.py``.
         participant_marker,
         participant_trace_mode,
     )
+    from plot_style import GRID_CONVERGENCE_NORMALIZATION, apply_xy_style
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -239,7 +241,7 @@ def write_case_outputs(
         participant_id = participant.split("_", 1)[0]
         fig.add_scatter(
             x=available,
-            y=[by_level[x] for x in available],
+            y=[by_level[level] for level in available],
             mode=participant_trace_mode(participant_id),
             name=participant_id,
             legendgroup=participant_id,
@@ -249,39 +251,57 @@ def write_case_outputs(
         )
     window = f"ds = {settings.ds_min if settings.ds_min is not None else 'data min'} to " \
              f"{settings.ds_max if settings.ds_max is not None else 'data max'} m"
+    apply_xy_style(
+        fig,
+        case_id,
+        "Grid level",
+        "Q_c' = ∫ HTC (Ts − Trec) ds [W/m]",
+        plot_family="convergence",
+        plot_key="qc_prime",
+        height=900,
+    )
     fig.update_layout(
         title={"text": f"Integrated Convective Heat Transfer per Unit Span (Q_c') Grid Convergence | All Participants | {case_id}",
                "x": 0.5, "xanchor": "center"},
-        font={"family": "Arial, Helvetica, sans-serif", "size": 16},
         width=1350,
-        height=900,
-        xaxis={
-            "title": {"text": "Grid level", "font": {"size": 18}},
-            "ticks": "outside", "showline": True, "linecolor": "black",
-            "linewidth": 2, "mirror": True, "showgrid": True,
-            "gridcolor": "lightgray", "zeroline": False,
-        },
-        yaxis={
-            "title": {"text": "Q_c' = ∫ HTC (Ts − Trec) ds [W/m]", "font": {"size": 18}},
-            "ticks": "outside", "automargin": True, "showline": True,
-            "linecolor": "black", "linewidth": 2, "mirror": True,
-            "showgrid": True, "gridcolor": "lightgray", "zeroline": False,
-        },
-        legend={"orientation": "v", "x": 1.02, "xanchor": "left",
-                "y": 1.0, "yanchor": "top"},
         margin={"l": 90, "r": 220, "t": 100, "b": 95},
-        plot_bgcolor="white",
-        paper_bgcolor="white",
         annotations=[{"text": window, "xref": "paper", "yref": "paper", "x": 0,
                       "y": -0.12, "showarrow": False}],
     )
-    fig.update_xaxes(categoryorder="array", categoryarray=list(LEVELS))
+    fig.update_xaxes(
+        categoryorder="array",
+        categoryarray=list(LEVELS),
+        title={"text": GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level")},
+    )
     fig.write_image(
         str(output_dir / f"ALL_PARTICIPANTS_{slug}_Qc_prime_grid_convergence.png"),
         width=1350,
         height=900,
         scale=image_scale,
     )
+    if GRID_CONVERGENCE_NORMALIZATION.get("enabled", True):
+        relative_fig = go.Figure(fig)
+        reference_level = str(GRID_CONVERGENCE_NORMALIZATION.get("reference_grid_level", "L1"))
+        for trace in relative_fig.data:
+            levels = [str(level) for level in trace.x]
+            if reference_level not in levels:
+                trace.visible = "legendonly"
+                continue
+            reference_value = float(trace.y[levels.index(reference_level)])
+            if not np.isfinite(reference_value) or reference_value == 0.0:
+                trace.visible = "legendonly"
+                continue
+            trace.y = [(float(value) - reference_value) / reference_value * 100.0 for value in trace.y]
+        relative_fig.update_layout(
+            title={"text": f"Integrated Convective Heat Transfer per Unit Span (Q_c') Grid Convergence | Signed Relative Difference from L1 | {case_id}"},
+        )
+        relative_fig.update_yaxes(title={"text": "Q_c' difference from L1 [%]"})
+        relative_fig.write_image(
+            str(output_dir / f"ALL_PARTICIPANTS_{slug}_Qc_prime_grid_convergence_relative_to_L1.png"),
+            width=1350,
+            height=900,
+            scale=image_scale,
+        )
 
 
 def parse_window_override(value: str) -> tuple[str, float | None, float | None]:

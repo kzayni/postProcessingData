@@ -32,7 +32,7 @@ The simulations were performed using commercial Ansys CFD Package tools, namely
 
 **Flow Algorithm:**
 
-The aerodynamics solutions were computed using Ansys Fluent 2025R2, double precision, pressure-based steady-state solver. The walls were set adiabatic with constant roughness of 0.5mm. QUICK discretization scheme was used to discretize RANS equations.
+The aerodynamics solutions were computed using Ansys Fluent 2025R2, double precision, pressure-based steady-state solver. QUICK discretization scheme was used to discretize RANS equations. For ice accretion computations all walls were set adiabatic and with constant roughness of 0.5mm applied to wing only. Separately to that for CP, lift drag and other pure aerodynamic results a smooth wall assumption was applied to the wing as well.
 
 **Turbulence Model:**
 
@@ -40,9 +40,15 @@ k-omega SST turbulence model was used. Roughness was included through Sand Grain
 
 **Droplet Trajectory Algorithm:**
 
-Drop3D (Fensap-Ice 2025R2 package) solver was used to compute droplet trajectories. Particle drag was modeled using Extended Reynolds drag model. Default solver accuracy was used for computations. **Thermodynamic Algorithm:**
+Drop3D (Fensap-Ice 2025R2 package) solver was used to compute droplet trajectories. Particle drag was modeled using Extended Reynolds drag model. Default solver accuracy was used for computations.
 
-Ice accretion was computed using ICE3D (Fensap-Ice 2025R2 package) solver and extended icing data (EID) module. Impact Ice density model was used for ice density prediction. Simulations were done with single-step approach.
+**Thermodynamic Algorithm:**
+
+Ice accretion was computed using ICE3D (Fensap-Ice 2025R2 package) solver and extended icing data (EID) module. Impact Ice density model was used for ice density prediction. Simulations were done with single-step \& multi-step approach. In case of multi-step approach 1-minute intervals have been used for ice accretion before updating the mesh and aerodynamic \& drop solutions.
+
+**Mesh deformation Algorithm:**
+
+For multi-step simulations ALE morphing method was selected in Fensap-Ice for updating the mesh after each shot. L2, L3, L4 meshes successfully morphed for entire icing duration from the test, while L1 mesh due to fine mesh and ice shape fidelity produced negative elements after 5th shot.
 
 ## Other Information
 
@@ -50,5 +56,5 @@ Fensap-ICE is interpolating data from Drop3D droplet trajectory module to Ice3D 
 
 
 
-PL and EU Export Classification: UNCTD, Not Controlled
+PL and EU Export Classification: NSR
 

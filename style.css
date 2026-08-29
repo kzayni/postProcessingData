@@ -127,6 +127,20 @@ body {
   display: none;
 }
 
+/* Complete-grid statistical sample, displayed immediately above its table. */
+.statistical-participants,
+.plot-subsection .statistical-participants {
+  display: block;
+  margin: 1rem 0 0.6rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid #486581;
+  border-radius: 6px;
+  background: #f0f4f8;
+  color: #243b53;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
 .plot-filter-scope {
   padding: 22px;
   border-bottom: 1px solid #e4e7eb;
@@ -488,8 +502,9 @@ body {
 }
 
 .slice-plot-group h5 {
-  margin: 0 0 10px 0;
-  font-size: 17px;
+  margin: 0 0 14px 0;
+  font-size: 22px;
+  line-height: 1.3;
   color: #334e68;
 }
 
@@ -590,6 +605,70 @@ body {
   background: #f9fafb;
 }
 
+/* Statistical tables should follow the width of their numeric contents
+   instead of stretching every column equally across the page. */
+.statistical-table {
+  width: auto;
+  max-width: 100%;
+  table-layout: auto;
+}
+
+.statistical-table th,
+.statistical-table td {
+  width: 1%;
+}
+
+.statistical-table th {
+  white-space: normal;
+}
+
+.statistical-table td {
+  white-space: nowrap;
+}
+
+/* CL comparison example: raw and L1-relative plots share one row. */
+.convergence-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.convergence-statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1.5rem;
+}
+
+.convergence-comparison-panel {
+  min-width: 0;
+}
+
+.convergence-comparison-panel .plotly-graph-div {
+  min-height: 0;
+}
+
+.roughness-summary {
+  display: block;
+  margin: 0.75rem 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 4px solid #64748b;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #334e68;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .convergence-comparison-grid,
+  .convergence-statistics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ========================================================================== */
 /* IPW-3 case/grid layout additions                                           */
 /* ========================================================================== */
@@ -616,6 +695,89 @@ body {
   font-weight: 700;
   font-size: 1.05rem;
   color: #334e68;
+}
+
+/* Metric cards use an explicit sibling gap so the space appears between the
+   outside borders and cannot be lost to margin collapsing or scope resets. */
+.analysis-metric-section {
+  margin-block: 0;
+}
+
+.analysis-metric-section > summary {
+  padding-block: 0.75rem;
+}
+
+.analysis-metric-section + .analysis-metric-section,
+.plot-filter-scope > .analysis-metric-section + .analysis-metric-section {
+  margin-top: 2.5rem;
+}
+
+.convergence-metric-content {
+  padding-top: 1rem;
+}
+
+/* The summary already names the metric, so suppress the repeated heading at
+   the top of its expanded content while preserving headings in standalone
+   convergence sections. */
+.convergence-metric-content .redundant-metric-title {
+  display: none;
+}
+
+/* Water Mass Analysis uses rounded collapsible cards; the generic section
+   dividers create stray horizontal lines between those cards. */
+.water-mass-analysis,
+.beta-max-analysis {
+  border-bottom: none;
+}
+
+.water-mass-analysis > .analysis-metric-section,
+.beta-max-analysis > .analysis-metric-section {
+  border-bottom-color: #d9e2ec;
+}
+
+.beta-max-analysis > .analysis-metric-section {
+  margin-inline: -22px;
+}
+
+.horn-reference-showcase {
+  padding: 1rem 22px 2rem;
+}
+
+.horn-reference-showcase > h2 {
+  margin-bottom: 0.5rem;
+  color: #243b53;
+}
+
+.horn-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.horn-reference-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #d9e2ec;
+  border-radius: 12px;
+  background: white;
+}
+
+.horn-reference-card h3 {
+  margin: 0 0 0.75rem;
+  text-align: center;
+  color: #334e68;
+  font-size: 1.3rem;
+}
+
+.horn-reference-card .plot-container {
+  min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  .horn-reference-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .plot-grid {

@@ -15,6 +15,7 @@ import plotly.io as pio
 from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
 from .heat_flux_computations import CASE_SETTINGS as HEAT_FLUX_CASE_SETTINGS, recovery_temperature
 from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
+from .plot_style import apply_xy_style, beta_inset_x_range, cutdata_x_range, individual_plot_style
 
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
@@ -134,7 +135,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     },
     {
         "plot_key": "beta_bins01_vs_s",
-        "title": "Collection Efficiency vs s | BINS01",
+        "title": "Collection Efficiency vs s | 01",
         "description": "Collection efficiency for the single-bin droplet distribution.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
@@ -145,7 +146,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     },
     {
         "plot_key": "beta_bins03_vs_s",
-        "title": "Collection Efficiency vs s | BINS03",
+        "title": "Collection Efficiency vs s | 03",
         "description": "Collection efficiency for the 3-bin droplet distribution.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
@@ -156,7 +157,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     },
     {
         "plot_key": "beta_bins07_vs_s",
-        "title": "Collection Efficiency vs s | BINS07",
+        "title": "Collection Efficiency vs s | 07",
         "description": "Collection efficiency for the 7-bin droplet distribution.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
@@ -167,7 +168,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     },
     {
         "plot_key": "beta_bins15_vs_s",
-        "title": "Collection Efficiency vs s | BINS15",
+        "title": "Collection Efficiency vs s | 15",
         "description": "Collection efficiency for the 15-bin droplet distribution.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
@@ -178,7 +179,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
     },
     {
         "plot_key": "beta_cards_vs_s",
-        "title": "Collection Efficiency vs s | BINS",
+        "title": "Collection Efficiency vs s | All distributions",
         "description": "Collection efficiency for all submitted bin distributions.",
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
@@ -433,6 +434,12 @@ def parse_ipw3_zone_name(zone_name: str) -> dict[str, str] | None:
     return {"slice": match.group("slice"), "bins": match.group("bins").upper(), "dataset": dataset_id}
 
 
+def display_bins_id(bins_id: str) -> str:
+    """Return 01/03/07/15 for presentation while retaining BINSxx keys."""
+    match = re.search(r"\d+", str(bins_id))
+    return match.group(0).zfill(2) if match is not None else str(bins_id)
+
+
 def cutdata_zone_sort_key(zone_item: tuple[str, Any]) -> tuple[int, str]:
     """Order cut-data zones by bin count so shared fields use the first bin."""
     zone_name, _zone = zone_item
@@ -452,34 +459,8 @@ def format_slice_positions(slice_values: list[float]) -> str:
     return ", ".join(f"Y = {value:g} m" for value in unique_values)
 
 
-def style_xy_figure(fig: go.Figure, x_label: str, y_label: str, height: int = 560, legend_right: bool = True, reverse_y_axis: bool = False, y_range: list[float] | None = None) -> go.Figure:
-    if legend_right:
-        legend = dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top")
-        margin = dict(l=90, r=220, t=30, b=80)
-    else:
-        legend = dict(orientation="h", x=0.0, xanchor="left", y=1.12, yanchor="bottom")
-        margin = dict(l=90, r=40, t=70, b=80)
-
-    yaxis = dict(title=dict(text=y_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False)
-    if y_range is not None:
-        yaxis["range"] = y_range
-    elif reverse_y_axis:
-        yaxis["autorange"] = "reversed"
-
-    fig.update_layout(
-        font=dict(family="Arial, Helvetica, sans-serif", size=16),
-        autosize=True,
-        height=height,
-        title=None,
-        showlegend=True,
-        xaxis=dict(title=dict(text=x_label, font=dict(size=18)), ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
-        yaxis=yaxis,
-        legend=legend,
-        margin=margin,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-    )
-    return fig
+def style_xy_figure(fig: go.Figure, case_id: str, plot_key: str, x_label: str, y_label: str, height: int = 560, legend_right: bool = True, reverse_y_axis: bool = False, y_range: list[float] | None = None) -> go.Figure:
+    return apply_xy_style(fig, case_id, x_label, y_label, plot_family="cutdata", plot_key=plot_key, height=height, legend_right=legend_right, reverse_y_axis=reverse_y_axis, y_range=y_range)
 
 
 def add_collection_efficiency_inset(
@@ -1172,7 +1153,7 @@ def build_cutdata_figure(
                         f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
                         f"Case: {escape(case_id)}<br>"
                         f"Grid: {escape(grid_level)}<br>"
-                        f"Bins: {escape(bins_id or 'not specified')}<br>"
+                        f"Distribution: {escape(display_bins_id(bins_id) if bins_id else 'not specified')}<br>"
                         f"Slice: {escape(slice_text)}<br>"
                         f"Zone: {escape(zone_name)}<br>"
                         f"{escape(x_column)}=%{{x}}<br>"
@@ -1185,29 +1166,21 @@ def build_cutdata_figure(
     trace_count += add_reference_traces(fig, case_id, grid_level, plot_spec["plot_key"])
     style_xy_figure(
         fig,
+        case_id,
+        plot_spec["plot_key"],
         plot_spec["x_label"],
         plot_spec["y_label"],
         reverse_y_axis=plot_spec.get("reverse_y_axis", False),
         y_range=plot_spec.get("y_range"),
     )
-    if plot_spec["plot_key"] == "freezing_fraction_vs_s":
-        fig.update_xaxes(range=[-0.4, 0.4])
-    if case_id == "TC_ONERAM6" and plot_spec["plot_key"] == "htc_vs_s":
-        fig.update_xaxes(range=[-0.4, 0.4])
-    if case_id == "TC_ONERAM6" and is_beta_plot:
-        fig.update_xaxes(range=[-0.15, 0.15])
-    if case_id.startswith("TC_NACA0012_") and (
-        plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot
-    ):
-        fig.update_xaxes(range=[-0.4, 0.4])
+    configured_x_range = cutdata_x_range(case_id, plot_spec["plot_key"], is_beta_plot)
+    plot_xaxis_style = individual_plot_style(case_id, plot_spec["plot_key"]).get("xaxis", {})
+    if configured_x_range is not None and "range" not in plot_xaxis_style:
+        fig.update_xaxes(range=configured_x_range)
     if is_beta_plot and show_cp_inset:
         add_collection_efficiency_inset(
             fig,
-            x_range=(
-                (-0.025, 0.025)
-                if case_id == "TC_ONERAM6"
-                else (-0.025, 0.025) if case_id.startswith("TC_NACA0012_") else None
-            ),
+            x_range=beta_inset_x_range(case_id),
         )
     if plot_spec["plot_key"] in {"cp_vs_x", "cp_vs_s"}:
         attachment_x = 0.0
@@ -1285,7 +1258,7 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
                     x=data[x_column],
                     y=data[y_column],
                     mode=participant_trace_mode(participant.participant_id),
-                    name=bins_id,
+                    name=display_bins_id(bins_id),
                     legendgroup=bins_id,
                     line=dict(color=color, dash=BIN_LINE_DASHES.get(bins_id, "solid")),
                     marker=participant_marker(participant.participant_id, len(data)),
@@ -1293,7 +1266,7 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
                         f"Participant: {escape(label)}<br>"
                         f"Case: {escape(case_id)}<br>"
                         f"Grid: {escape(grid_level)}<br>"
-                        f"Bins: {escape(bins_id)}<br>"
+                        f"Distribution: {escape(display_bins_id(bins_id))}<br>"
                         f"Slice: {escape(slice_text)}<br>"
                         f"Zone: {escape(zone_name)}<br>"
                         f"{escape(x_column)}=%{{x}}<br>"
@@ -1305,7 +1278,7 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
 
     if trace_count == 0:
         return "", 0, slice_positions
-    style_xy_figure(fig, "s [m]", "Beta [-]", height=420, legend_right=False)
+    style_xy_figure(fig, case_id, "beta", "s [m]", "Beta [-]", height=420, legend_right=False)
     fig.update_layout(margin=dict(l=70, r=25, t=20, b=60), legend=dict(orientation="h", x=0.0, y=1.12))
     slice_slug = f"_slice_{slice_filter:g}".replace(".", "p") if slice_filter is not None else ""
     filename = f"{slugify(case_id)}_{grid_level}_{participant.participant_id}_{dataset_data.dataset_id}{slice_slug}_combined_beta"
@@ -1321,7 +1294,7 @@ def build_combined_beta_card(participant, dataset_data, case_id: str, grid_level
     if trace_count == 0:
         return ""
     slice_title = f" | Y = {slice_filter:g} m" if slice_filter is not None else ""
-    details = f"Legend: {participant_id}. Case: {case_id}. Grid level: {grid_level}. {highlight_point_description(case_id, slice_positions)} Slice location(s): {format_slice_positions(slice_positions)}. Curves included when available: BINS01, BINS03, BINS07, and BINS15."
+    details = f"Legend: {participant_id}. Case: {case_id}. Grid level: {grid_level}. {highlight_point_description(case_id, slice_positions)} Slice location(s): {format_slice_positions(slice_positions)}. Curves included when available: 01, 03, 07, and 15."
     return f"""
     <article class="combined-beta-card">
       <h4>{escape(participant_id + slice_title)}</h4>
@@ -1358,7 +1331,7 @@ def build_combined_beta_section(participants, case_id: str, grid_level: str) -> 
     <section class="plot-subsection combined-beta-section" data-variable-key="combined_beta" data-variable-label="Combined Beta">
       <h4>Combined Beta by participant</h4>
       <p class="plot-description">
-        Each card corresponds to one participant dataset. Inside each card, BINS01, BINS03, BINS07, and BINS15 are overlaid on the same Beta vs s figure. Participant cards are arranged three per row when space allows. Legends use only PID.DID.
+        Each card corresponds to one participant dataset. Inside each card, 01, 03, 07, and 15 are overlaid on the same Beta vs s figure. Participant cards are arranged three per row when space allows. Legends use only PID.DID.
       </p>
       <div class="combined-beta-gallery">
         {cards_html}
@@ -1411,6 +1384,8 @@ def build_participant_combined_levels_cutdata_figure(
 
     style_xy_figure(
         combined_fig,
+        case_id,
+        plot_spec["plot_key"],
         plot_spec["x_label"],
         plot_spec["y_label"],
         reverse_y_axis=plot_spec.get("reverse_y_axis", False),

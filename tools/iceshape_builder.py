@@ -6,80 +6,26 @@ from functools import lru_cache
 from html import escape
 from pathlib import Path
 from typing import Any
+import math
 import re
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
-from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
+from .gatherParticipantData import (
+    CASE_SLICES,
+    NACA0012_ROTATION_DEGREES,
+    decode_slice_position,
+    iter_grid_datasets,
+    read_tecplot_dat,
+)
 from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
+from .plot_style import apply_xy_style, ice_shape_axis_config
 
 GRID_LEVEL_LINE_DASHES = {"L1": "solid", "L2": "dash", "L3": "dot", "L4": "dashdot"}
 
-
-# Central place to tune ice-shape figure axes.
-# Settings can be defined globally, per case, and per slice.
-# Set any range to None to keep Plotly automatic scaling.
-ICE_SHAPE_AXIS_SETTINGS = {
-    "default": {
-        "x_title": "X [m]",
-        "y_title": "Z [m]",
-        "x_range": None,
-        "y_range": None,
-        "leading_edge_fraction": 0.25,
-    },
-    "TC_ONERAM6": {
-        "default": {
-            "x_title": "X [m]",
-            "y_title": "Z [m]",
-            "x_range": None,
-            "y_range": None,
-        },
-        "slices": {
-            0.1: {
-                "x_range": None,
-                "y_range": None,
-            },
-            0.75: {
-                "x_range": None,
-                "y_range": None,
-            },
-            1.4: {
-                "x_range": None,
-                "y_range": None,
-            },
-        },
-    },
-    "TC_NACA0012_AE3932": {
-        "default": {
-            "x_title": "X [m]",
-            "y_title": "Z [m]",
-            "x_range": None,
-            "y_range": None,
-        },
-        "slices": {
-            0.9144: {
-                "x_range": None,
-                "y_range": None,
-            },
-        },
-    },
-    "TC_NACA0012_AE3933": {
-        "default": {
-            "x_title": "X [m]",
-            "y_title": "Z [m]",
-            "x_range": None,
-            "y_range": None,
-        },
-        "slices": {
-            0.9144: {
-                "x_range": None,
-                "y_range": None,
-            },
-        },
-    },
-}
 
 EXPERIMENTAL_ICE_SHAPE_FILES = {
     "TC_NACA0012_AE3932": Path("E00_Experimental-Data") / "EXP_AE3932.dat",
@@ -87,6 +33,12 @@ EXPERIMENTAL_ICE_SHAPE_FILES = {
 }
 INCLUDE_EXPERIMENTAL_DATA = True
 VARIABLE_FILTER: set[str] | None = None
+INCLUDE_HORN_OVERLAYS = False
+
+# Experimental ice-shape trace opacity: 1.0 is fully opaque and 0.0 is fully
+# transparent. Lower this value to make the Max/Mean/Min CCS lines and markers
+# less visually dominant over participant results.
+EXPERIMENTAL_ICE_SHAPE_OPACITY = 0.55
 
 INCHES_TO_METRES = 0.0254
 
@@ -94,6 +46,12 @@ INCHES_TO_METRES = 0.0254
 def set_variable_filter(variables: set[str] | None) -> None:
     global VARIABLE_FILTER
     VARIABLE_FILTER = variables
+
+
+def set_include_horn_overlays(include: bool) -> None:
+    """Enable upper-horn construction lines on NACA0012 ice shapes."""
+    global INCLUDE_HORN_OVERLAYS
+    INCLUDE_HORN_OVERLAYS = include
 
 # Edit experimental ice-shape appearance here.
 #
@@ -111,14 +69,14 @@ def set_variable_filter(variables: set[str] | None) -> None:
 EXPERIMENTAL_ICE_SHAPE_STYLES = {
     "TC_NACA0012_AE3932": {
         "MAXCCS": {
-            "show_contour": False,
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
-            "line_width": 2,
+            "line_width": 1.5,
             "line_dash": "solid",
-            "marker_size": 8,
-            "marker_symbol": "square",
+            "marker_size": 4,
+            "marker_symbol": "circle",
             "marker_frequency": 50,
         },
         "MEANCCS": {
@@ -126,34 +84,34 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
-            "line_width": 3,
+            "line_width": 1.5,
             "line_dash": "solid",
-            "marker_size": 8,
+            "marker_size": 4,
             "marker_symbol": "square",
-            "marker_frequency": 25,
+            "marker_frequency": 15,
         },
         "MINCCS": {
-            "show_contour": False,
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
-            "line_width": 2,
+            "line_width": 1.5,
             "line_dash": "solid",
-            "marker_size": 8,
-            "marker_symbol": "square",
+            "marker_size": 4,
+            "marker_symbol": "diamond",
             "marker_frequency": 50,
         },
     },
     "TC_NACA0012_AE3933": {
         "MAXCCS": {
-            "show_contour": False,
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
-            "line_width": 2,
+            "line_width": 1.5,
             "line_dash": "solid",
-            "marker_size": 8,
-            "marker_symbol": "square",
+            "marker_size": 4,
+            "marker_symbol": "circle",
             "marker_frequency": 50,
         },
         "MEANCCS": {
@@ -161,21 +119,21 @@ EXPERIMENTAL_ICE_SHAPE_STYLES = {
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
-            "line_width": 3,
+            "line_width": 1.5,
             "line_dash": "solid",
-            "marker_size": 8,
+            "marker_size": 4,
             "marker_symbol": "square",
-            "marker_frequency": 25,
+            "marker_frequency": 50,
         },
         "MINCCS": {
-            "show_contour": False,
+            "show_contour": True,
             "show_markers": True,
             "line_color": "#010002",
             "marker_color": "#ff56be",
-            "line_width": 2,
+            "line_width": 1.5,
             "line_dash": "solid",
-            "marker_size": 8,
-            "marker_symbol": "square",
+            "marker_size": 4,
+            "marker_symbol": "diamond",
             "marker_frequency": 50,
         },
     },
@@ -413,26 +371,15 @@ def format_slice_positions(slice_values: list[float]) -> str:
 
 def style_xy_figure(
     fig: go.Figure,
+    case_id: str,
+    plot_key: str,
     x_label: str,
     y_label: str,
     height: int = 650,
     x_range: list[float] | tuple[float, float] | None = None,
     y_range: list[float] | tuple[float, float] | None = None,
 ) -> go.Figure:
-    fig.update_layout(
-        font=dict(family="Arial, Helvetica, sans-serif", size=16),
-        autosize=True,
-        height=height,
-        title=None,
-        showlegend=True,
-        xaxis=dict(title=dict(text=x_label, font=dict(size=18)), range=x_range, ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
-        yaxis=dict(title=dict(text=y_label, font=dict(size=18)), range=y_range, ticks="outside", showline=True, linecolor="black", linewidth=2, mirror=True, showgrid=True, gridcolor="lightgray", zeroline=False),
-        legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
-        margin=dict(l=90, r=260, t=30, b=80),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-    )
-    return fig
+    return apply_xy_style(fig, case_id, x_label, y_label, plot_family="ice_shape", plot_key=plot_key, height=height, x_range=x_range, y_range=y_range)
 
 
 def leading_edge_axis_ranges(fig: go.Figure, chord_fraction: float = 0.25) -> tuple[list[float] | None, list[float] | None]:
@@ -467,23 +414,6 @@ def leading_edge_axis_ranges(fig: go.Figure, chord_fraction: float = 0.25) -> tu
     y_span = y_max - y_min
     y_padding = max(0.08 * y_span, 0.02 * window)
     return [x_min - x_padding, window_max + x_padding], [y_min - y_padding, y_max + y_padding]
-
-
-def ice_shape_axis_config(case_id: str, slice_filter: float | None) -> dict[str, Any]:
-    config = dict(ICE_SHAPE_AXIS_SETTINGS["default"])
-    case_config = ICE_SHAPE_AXIS_SETTINGS.get(case_id, {})
-
-    if isinstance(case_config, dict):
-        config.update(case_config.get("default", {}))
-
-        if slice_filter is not None:
-            rounded_slice = round(slice_filter, 8)
-            for configured_slice, slice_config in case_config.get("slices", {}).items():
-                if abs(float(configured_slice) - rounded_slice) <= 1.0e-8:
-                    config.update(slice_config)
-                    break
-
-    return config
 
 
 def iter_grid_data(participants, case_id: str, grid_level: str):
@@ -559,6 +489,12 @@ def bin_sort_key(bins_id: str) -> tuple[int, str]:
     if match is None:
         return (10**9, bins_id)
     return (int(match.group(0)), bins_id)
+
+
+def display_bins_id(bins_id: str) -> str:
+    """Return a compact display label while retaining BINSxx internally."""
+    match = re.search(r"\d+", str(bins_id))
+    return match.group(0).zfill(2) if match is not None else str(bins_id)
 
 
 def detected_ice_shape_bins(participants, case_id: str, grid_level: str) -> list[str]:
@@ -637,6 +573,136 @@ def load_clean_reference_data(reference_path_text: str):
     # placeholder rows from flooding the build output.
     with redirect_stdout(io.StringIO()):
         return read_tecplot_dat(Path(reference_path_text), process_cutdata=False)
+
+
+@lru_cache(maxsize=None)
+def naca_clean_reference_points() -> tuple[np.ndarray, np.ndarray, tuple[float, float]] | None:
+    """Return rotated clean points and the chordwise-leading reference point."""
+    path = Path("R00_REFERENCE") / "NACA0012_CLEAN_ROTATED.dat"
+    if not path.exists():
+        return None
+    data = load_clean_reference_data(str(path))
+    x_parts, z_parts = [], []
+    for zone in data.zones.values():
+        x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
+        z_column = find_column_case_insensitive(zone.data.columns, ["Z", "CoordinateZ"])
+        if x_column is None or z_column is None:
+            continue
+        x = pd.to_numeric(zone.data[x_column], errors="coerce").to_numpy(dtype=float)
+        z = pd.to_numeric(zone.data[z_column], errors="coerce").to_numpy(dtype=float)
+        valid = np.isfinite(x) & np.isfinite(z) & (x > -998.0) & (z > -998.0)
+        x_parts.extend(x[valid]); z_parts.extend(z[valid])
+    if not x_parts:
+        return None
+    x_values, z_values = np.asarray(x_parts), np.asarray(z_parts)
+    angle = math.radians(NACA0012_ROTATION_DEGREES)
+    chordwise = x_values * math.cos(angle) + z_values * math.sin(angle)
+    leading_index = int(np.argmin(chordwise))
+    return x_values, z_values, (float(x_values[leading_index]), float(z_values[leading_index]))
+
+
+@lru_cache(maxsize=None)
+def onera_clean_reference_points(slice_position: float) -> tuple[np.ndarray, np.ndarray, tuple[float, float]] | None:
+    """Return the clean ONERA M6 section matching a requested spanwise slice."""
+    path = Path("R00_REFERENCE") / "ONERAM6_CLEAN.dat"
+    if not path.exists():
+        return None
+    clean_data = load_clean_reference_data(str(path))
+    best_match = None
+    for zone_name, zone in clean_data.zones.items():
+        match = re.search(r"SLICE_Y_([^_]+)", zone_name, flags=re.IGNORECASE)
+        if match is None:
+            continue
+        zone_slice = decode_slice_position(match.group(1))
+        if zone_slice is None or not math.isclose(zone_slice, slice_position, abs_tol=1e-6):
+            continue
+        x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
+        z_column = find_column_case_insensitive(zone.data.columns, ["Z", "CoordinateZ"])
+        if x_column is None or z_column is None:
+            continue
+        x = pd.to_numeric(zone.data[x_column], errors="coerce").to_numpy(dtype=float)
+        z = pd.to_numeric(zone.data[z_column], errors="coerce").to_numpy(dtype=float)
+        valid = np.isfinite(x) & np.isfinite(z) & (x > -998.0) & (z > -998.0)
+        x, z = x[valid], z[valid]
+        if x.size:
+            leading_index = int(np.argmin(x))
+            best_match = (x, z, (float(x[leading_index]), float(z[leading_index])))
+            break
+    return best_match
+
+
+def upper_horn_geometry(
+    x_values, z_values, case_id: str = "TC_NACA0012", slice_position: float | None = None,
+) -> tuple[tuple[float, float], tuple[float, float], float] | None:
+    """Detect the upper horn using the matching clean-section reference."""
+    is_onera = "ONERAM6" in case_id.upper()
+    reference = onera_clean_reference_points(slice_position) if is_onera and slice_position is not None else naca_clean_reference_points()
+    if reference is None:
+        return None
+    clean_x, clean_z, leading_point = reference
+    x = pd.to_numeric(pd.Series(x_values), errors="coerce").to_numpy(dtype=float)
+    z = pd.to_numeric(pd.Series(z_values), errors="coerce").to_numpy(dtype=float)
+    valid = np.isfinite(x) & np.isfinite(z) & (x > -998.0) & (z > -998.0)
+    x, z = x[valid], z[valid]
+    if not x.size:
+        return None
+    if is_onera:
+        # For M6, define the horn independently for every participant and
+        # spanwise slice. The horn is the submitted point extending farthest
+        # upstream (minimum global X); its angle origin is the nearest point
+        # on that slice's clean surface, rather than a shared clean LE point.
+        horn_index = int(np.argmin(x))
+        horn_point = (float(x[horn_index]), float(z[horn_index]))
+        surface_index = int(np.argmin(np.hypot(clean_x - horn_point[0], clean_z - horn_point[1])))
+        reference_point = (float(clean_x[surface_index]), float(clean_z[surface_index]))
+        horn_angle = math.degrees(math.atan2(
+            horn_point[1] - reference_point[1],
+            horn_point[0] - reference_point[0],
+        ))
+        return reference_point, horn_point, horn_angle
+    angle = 0.0 if is_onera else math.radians(NACA0012_ROTATION_DEGREES)
+    dx, dz = x - leading_point[0], z - leading_point[1]
+    chordwise = dx * math.cos(angle) + dz * math.sin(angle)
+    normal = -dx * math.sin(angle) + dz * math.cos(angle)
+    chord = max(float(np.max(clean_x) - np.min(clean_x)), 1e-9) if is_onera else 0.5334
+    candidates = (normal > 0.0) & (chordwise >= -0.1 * chord) & (chordwise <= 0.25 * chord)
+    candidate_indices = np.flatnonzero(candidates)
+    if not candidate_indices.size:
+        return None
+    # Maximum distance from the rotated clean contour identifies the upper
+    # accretion horn without relying on the harder-to-detect lower horn.
+    distances = []
+    for index in candidate_indices:
+        distances.append(float(np.min(np.hypot(clean_x - x[index], clean_z - z[index]))))
+    horn_index = int(candidate_indices[int(np.argmax(distances))])
+    horn_point = (float(x[horn_index]), float(z[horn_index]))
+    horn_dx, horn_dz = horn_point[0] - leading_point[0], horn_point[1] - leading_point[1]
+    # Report the horn direction in the submitted/plot coordinate system:
+    # zero degrees is the positive global x-axis through the clean LE point.
+    horn_angle = math.degrees(math.atan2(horn_dz, horn_dx))
+    return leading_point, horn_point, horn_angle
+
+
+def add_upper_horn_overlay(fig: go.Figure, case_id: str, x_values, z_values, label: str, color: str, legendgroup: str) -> None:
+    """Draw the leading-reference-to-upper-horn construction when requested."""
+    if not INCLUDE_HORN_OVERLAYS or "NACA0012" not in case_id.upper():
+        return
+    geometry = upper_horn_geometry(x_values, z_values)
+    if geometry is None:
+        return
+    reference_point, horn_point, horn_angle = geometry
+    fig.add_trace(go.Scatter(
+        x=[reference_point[0], horn_point[0]], y=[reference_point[1], horn_point[1]],
+        customdata=[["Clean leading-edge reference", horn_angle], ["Detected upper horn", horn_angle]],
+        mode="lines+markers", name=f"{label} | Upper horn angle = {horn_angle:.2f}°",
+        legendgroup=legendgroup, showlegend=label.startswith("Exp."), legendrank=1004,
+        line={"color": color, "width": 2, "dash": "solid"},
+        marker={"color": color, "size": [6, 9], "symbol": ["circle-open", "diamond"]},
+        hovertemplate=(
+            f"{escape(label)}<br>%{{customdata[0]}}<br>Upper horn angle=%{{customdata[1]:.4g}}°<br>"
+            "X=%{x:.6g}, Z=%{y:.6g}<extra></extra>"
+        ),
+    ))
 
 
 def ordered_clean_reference_columns(case_id: str, zone, x_column: str, z_column: str):
@@ -773,6 +839,7 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
 
     experimental_data = load_experimental_ice_shape_data(str(experimental_path))
     trace_count = 0
+    experimental_start_index = len(fig.data)
 
     for zone_name, zone in experimental_data.zones.items():
         x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
@@ -822,6 +889,7 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
                 name=f"Exp. {contour_label}",
                 legendgroup=f"experimental_{normalized_zone_name.lower()}",
                 legendrank=legend_rank,
+                opacity=EXPERIMENTAL_ICE_SHAPE_OPACITY,
                 line=dict(
                     color=style["line_color"],
                     width=style["line_width"],
@@ -842,7 +910,20 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
                 ),
             )
         )
+        add_upper_horn_overlay(
+            fig, case_id, x_values[valid], z_values[valid],
+            f"Exp. {contour_label}", style["marker_color"],
+            f"experimental_{normalized_zone_name.lower()}",
+        )
         trace_count += 1
+
+    # Plotly draws later SVG traces over earlier ones. Move the experimental
+    # contours ahead of submitted shapes so participant results remain visible
+    # where the curves overlap, without changing legend order or styling.
+    if trace_count:
+        experimental_traces = tuple(fig.data[experimental_start_index:])
+        submitted_traces = tuple(fig.data[:experimental_start_index])
+        fig.data = experimental_traces + submitted_traces
 
     return trace_count
 
@@ -952,7 +1033,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                         f"Source: finalIceShape / iceShape<br>"
                         f"Shape type: {escape(str(shape_type))}<br>"
                         f"Shape role: {escape(str(shape_role))}<br>"
-                        f"Bins: {escape(str(bins_id))}<br>"
+                        f"Distribution: {escape(display_bins_id(str(bins_id)))}<br>"
                         f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
                         f"Slice: {escape(str(slice_text))}<br>"
                         f"Zone: {escape(zone_name)}<br>"
@@ -960,6 +1041,10 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                         f"{escape(z_iced_column)}=%{{y}}<extra></extra>"
                     ),
                 )
+            )
+            add_upper_horn_overlay(
+                fig, case_id, plot_data[x_iced_column], plot_data[z_iced_column],
+                label, color, f"horn_{label}",
             )
 
             trace_count += 1
@@ -972,6 +1057,8 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
     leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
     style_xy_figure(
         fig,
+        case_id,
+        "ice_shape_single",
         axis_config["x_title"],
         axis_config["y_title"],
         x_range=axis_config["x_range"] or leading_x_range,
@@ -1051,7 +1138,11 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
             trace_name = label if layer_id.startswith("zone ") else f"{label} {layer_id}"
             if "NACA0012" in case_id.upper() and roughness_filter is None:
                 trace_name = f"{trace_name} | {format_roughness_title(roughness_key)}"
-            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode=participant_trace_mode(participant.participant_id), name=trace_name, legendgroup=label, legendrank=participant_legend_rank(participant.participant_id), line=dict(color=color), marker=participant_marker(participant.participant_id, len(plot_data)), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Bins: {escape(str(bins_id))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
+            fig.add_trace(go.Scatter(x=plot_data[x_iced_column], y=plot_data[z_iced_column], mode=participant_trace_mode(participant.participant_id), name=trace_name, legendgroup=label, legendrank=participant_legend_rank(participant.participant_id), line=dict(color=color), marker=participant_marker(participant.participant_id, len(plot_data)), hovertemplate=(f"Participant: {escape(label)}<br>" f"Case: {escape(case_id)}<br>" f"Grid: {escape(grid_level)}<br>" f"Shape type: {escape(str(shape_type))}<br>" f"Shape role: {escape(str(shape_role or 'FINAL_LAYER/legacy'))}<br>" f"Distribution: {escape(display_bins_id(str(bins_id)))}<br>" f"Roughness: {escape(format_roughness_title(roughness_key))}<br>" f"Slice: {escape(str(slice_text))}<br>" f"Layer/zone: {escape(str(layer_id))}<br>" f"NUM_LAYERS: {escape(str(num_layers))}<br>" f"DATA_TYPE: {escape(str(data_type))}<br>" f"Zone: {escape(zone_name)}<br>" f"{escape(x_iced_column)}=%{{x}}<br>" f"{escape(z_iced_column)}=%{{y}}<extra></extra>")))
+            add_upper_horn_overlay(
+                fig, case_id, plot_data[x_iced_column], plot_data[z_iced_column],
+                label, color, f"horn_{label}",
+            )
             trace_count += 1
 
     add_experimental_ice_shape_traces(fig, case_id)
@@ -1062,6 +1153,8 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
     leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
     style_xy_figure(
         fig,
+        case_id,
+        "ice_shape_final",
         axis_config["x_title"],
         axis_config["y_title"],
         x_range=axis_config["x_range"] or leading_x_range,
@@ -1174,7 +1267,7 @@ def build_combined_levels_ice_shape_section(participants, case_id: str, shape_ki
                         roughness_title = "All roughness heights" if roughness_filter is None else format_roughness_title(roughness_filter)
                         configurations_html += f"""
                         <section class="combined-grid-slice-group">
-                          <h4>{escape(f'{slice_title} | {bins_id} | {roughness_title}')}</h4>
+                          <h4>{escape(f'{slice_title} | {display_bins_id(bins_id)} | {roughness_title}')}</h4>
                           <div class="combined-grid-matrix">{cards_html}</div>
                         </section>
                         """
@@ -1246,7 +1339,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str, shape_k
         for roughness_key in figure_roughness:
                 roughness_slug = f"_roughness_{slugify(roughness_key or 'unspecified')}"
                 roughness_title = "All roughness heights" if combine_roughness else format_roughness_title(roughness_key)
-                bin_title = f"{slice_title} | {bins_id} | {roughness_title}"
+                bin_title = f"{slice_title} | {display_bins_id(bins_id)} | {roughness_title}"
                 slice_key = slugify(slice_title)
                 roughness_key_text = roughness_key or "unspecified"
                 roughness_filter_key = "all_roughness" if combine_roughness else slugify(roughness_key_text)
@@ -1289,7 +1382,7 @@ def build_ice_shape_section(participants, case_id: str, grid_level: str, shape_k
                     """
 
     configured_slice_text = format_slice_positions([value for value in configured_slices if value is not None])
-    configured_bins_text = ", ".join(configured_bins)
+    configured_bins_text = ", ".join(display_bins_id(value) for value in configured_bins)
     configured_roughness_text = ", ".join(format_roughness_title(value) for value in configured_roughness)
     participant_roughness_summary = collect_ice_shape_participant_roughness_summary(participants, case_id, grid_level)
     if roughness_filter_predicate is not None:
