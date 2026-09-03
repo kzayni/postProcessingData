@@ -269,6 +269,14 @@ def extract_roughness_key_from_zone_name(zone_name: str) -> str:
     return "default_roughness"
 
 
+def skip_participant_019_variable_density_beta(participant_id: str, zone_name: str) -> bool:
+    """Keep one 0.5 mm Beta result when 019 repeats it as variable density."""
+    return (
+        str(participant_id).zfill(3) == "019"
+        and re.search(r"(?:^|_)VAR_DENSITY(?:_|$)", zone_name, re.IGNORECASE) is not None
+    )
+
+
 def format_roughness_title(roughness_key: str) -> str:
     if roughness_key == "smooth":
         return "No Roughness"
@@ -1040,6 +1048,8 @@ def build_cutdata_figure(
         # the first available solution for each slice and ks condition.
         zone_items = sorted(cut_data.zones.items(), key=cutdata_zone_sort_key)
         for zone_name, zone in zone_items:
+            if is_beta_plot and skip_participant_019_variable_density_beta(participant.participant_id, zone_name):
+                continue
             zone_info = parse_ipw3_zone_name(zone_name)
             bins_id = zone_info["bins"] if zone_info is not None else None
             if bins_filter is not None and bins_id != bins_filter:
@@ -1078,8 +1088,12 @@ def build_cutdata_figure(
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
             participant_is_019 = str(participant.participant_id).zfill(3) == "019"
+            retains_participant_019_cp_orientation = plot_spec["plot_key"] in {
+                "cp_vs_s",
+                "recovery_temperature_vs_s",
+            }
             invert_participant_019_s = participant_is_019 and x_column.lower() == "s" and (
-                (case_id.startswith("TC_NACA0012_") and plot_spec["plot_key"] != "cp_vs_s")
+                (case_id.startswith("TC_NACA0012_") and not retains_participant_019_cp_orientation)
                 or (
                     case_id == "TC_ONERAM6"
                     and grid_level in {"L2", "L3", "L4"}
@@ -1231,9 +1245,9 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
     if (
         case_id.startswith("TC_NACA0012_")
         and uses_surface_distance_axis(plot_spec)
-        and plot_spec.get("plot_key") != "cp_vs_s"
+        and plot_spec.get("plot_key") not in {"cp_vs_s", "recovery_temperature_vs_s"}
     ):
-        details.append("For participant 019, the submitted surface orientation is corrected by plotting against -s; Cp retains its original s orientation.")
+        details.append("For participant 019, the submitted surface orientation is corrected by plotting against -s; Cp and Cp-derived recovery temperature retain the original s orientation.")
     details.append("Legend: Participant ID.")
     return " ".join(details)
 
@@ -1248,6 +1262,8 @@ def build_participant_combined_beta_figure(participant, dataset_data, case_id: s
 
     for bins_id in BETA_BINS:
         for zone_name, zone, slice_position in grouped_zones[bins_id]:
+            if skip_participant_019_variable_density_beta(participant.participant_id, zone_name):
+                continue
             if not slice_matches_filter(slice_position, slice_filter):
                 continue
             x_column = find_column_case_insensitive(zone.data.columns, ["s", "S"])

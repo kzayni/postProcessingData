@@ -1,0 +1,12 @@
+LEVEL 1			
+Roughness Height [mm] (0 if none i.e. smooth, -1 if variable roughness)	CL	CD	CMZ (pitching)
+0.00000	0.46849	0.01291	-0.00128
+LEVEL 2			
+Roughness Height [mm] (0 if none i.e. smooth, -1 if variable roughness)	CL	CD	CMZ (pitching)
+0.00000	0.46799	0.01358	-0.00061
+LEVEL 3			
+Roughness Height [mm] (0 if none i.e. smooth, -1 if variable roughness)	CL	CD	CMZ (pitching)
+0.00000	0.46525	0.01566	-0.00043
+LEVEL 4			
+Roughness Height [mm] (0 if none i.e. smooth, -1 if variable roughness)	CL	CD	CMZ (pitching)
+0.00000	0.46475	0.01679	-0.00043

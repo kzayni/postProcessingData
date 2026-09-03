@@ -47,19 +47,19 @@ from .plot_style import (
 )
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
-    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
-    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
+    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
+    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
+    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
 
-    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
+    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
 ]
 
 WATER_MASS_ANALYSIS_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
-    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "(Ice + evaporated water mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
+    {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
+    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "(Ice + evaporated water mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
 ]
 
 CFD_GRID_CONVERGENCE_PLOTS = [
@@ -71,12 +71,13 @@ ICING_GRID_CONVERGENCE_PLOTS = [
     if plot_spec.get("combined_icing_plot", False) or plot_spec.get("icing_plot", False)
 ]
 OPTIONAL_ICING_DIAMETER_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
 ]
 
-GRID_SPACING_COLUMN = "NORMALIZED_CHARACTERISTIC_GRID_SPACING"
+GRID_SPACING_COLUMN = "CHARACTERISTIC_GRID_SPACING"
+GRID_SPACING_AXIS_TITLE = "h = N<sup>−1/3</sup> [-]"
 VARIABLE_FILTER: set[str] | None = None
 INCLUDE_QC = True
 
@@ -300,12 +301,13 @@ def participant_label(participant) -> str:
 
 
 def format_x_hover_label(x_column: str) -> str:
-    return "log(h/h_L1)" if x_column == GRID_SPACING_COLUMN else x_column
+    return "h = N^(-1/3)" if x_column == GRID_SPACING_COLUMN else x_column
 
 
 def grid_convergence_coordinate(num_cells: float, l1_num_cells: float) -> float:
-    """Return log-normalized characteristic spacing for a three-dimensional mesh."""
-    return math.log(l1_num_cells / num_cells) / 3.0
+    """Return the characteristic spacing h = N^(-1/3) for a 3-D mesh."""
+    del l1_num_cells  # Retained in the signature for existing callers.
+    return num_cells ** (-1.0 / 3.0)
 
 
 def grid_level_number_from_value(value: Any) -> int | None:
@@ -436,7 +438,7 @@ def style_xy_figure(fig: go.Figure, case_id: str, plot_key: str, x_label: str, y
 
 
 def style_grid_level_x_axis(fig: go.Figure, case_id: str) -> go.Figure:
-    """Label grid-spacing coordinates with their corresponding L1-L4 names."""
+    """Plot characteristic spacing h = N^(-1/3) on a logarithmic axis."""
     counts = grid_cell_counts_for_case(case_id)
     levels = sorted(counts)
     if not levels:
@@ -445,19 +447,24 @@ def style_grid_level_x_axis(fig: go.Figure, case_id: str) -> go.Figure:
     if l1_num_cells is None:
         return fig
     tick_values = [grid_convergence_coordinate(counts[level], l1_num_cells) for level in levels]
+    log_tick_values = [math.log10(value) for value in tick_values]
+    log_range = [math.floor(min(log_tick_values)), math.ceil(max(log_tick_values))]
+    if log_range[0] == log_range[1]:
+        log_range[1] += 1
     fig.update_xaxes(
-        type="linear",
-        tickmode="array",
-        tickvals=tick_values,
-        ticktext=[f"{value:.3f}" for value in tick_values],
-        range=[
-            min(tick_values) - 0.5,
-            max(tick_values) + 0.5,
-        ],
+        type="log",
+        tickmode="linear",
+        dtick=1,
+        tickformat=".0e",
+        exponentformat="power",
+        showexponent="all",
+        range=log_range,
+        showgrid=True,
+        minor={"showgrid": True, "dtick": "D1"},
         title=dict(
             text=GRID_CONVERGENCE_NORMALIZATION.get(
                 "grid_coordinate_axis_title",
-                "log(h/h<sub>L1</sub>) [-]",
+                GRID_SPACING_AXIS_TITLE,
             ),
             font=dict(size=18),
         ),
@@ -652,6 +659,11 @@ NACA0012_MASS_PLOT_KEYS = {
     "water_evap_mass_by_diameter_vs_n",
 }
 
+NACA0012_EXPERIMENTAL_ICE_MASS_G = {
+    "TC_NACA0012_AE3932": 101.0,
+    "TC_NACA0012_AE3933": 85.9,
+}
+
 
 def scale_naca0012_mass_figure_to_grams(fig: go.Figure, case_id: str, plot_key: str) -> None:
     """Convert submitted kilogram trace values to grams at the output boundary."""
@@ -680,11 +692,20 @@ def grid_convergence_figure_pair_html(
         GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level"),
     )
     style_grid_level_x_axis(fig, case_id)
+    # Keep physical reference lines on the absolute plot only; they are not
+    # participant series and must not enter L1 normalization or statistics.
+    participant_fig = go.Figure(fig)
+    if plot_key == "ice_mass_vs_n" and case_id in NACA0012_EXPERIMENTAL_ICE_MASS_G:
+        fig.add_hline(
+            y=NACA0012_EXPERIMENTAL_ICE_MASS_G[case_id],
+            line_color="black",
+            line_width=1.5,
+            line_dash="dash",
+        )
     absolute_html = figure_to_html_div(fig, filename=filename, plot_title=plot_title)
     # Experimental horn angles are constant physical reference lines.  Keep
     # them on the raw plot, but do not treat them as participant grid series
     # in either across-participant statistics or L1-relative normalization.
-    participant_fig = go.Figure(fig)
     participant_fig.data = tuple(
         trace for trace in participant_fig.data
         if not str(getattr(trace, "legendgroup", "") or "").startswith("horn_reference_")
@@ -1156,13 +1177,13 @@ def build_qc_prime_integration_figure(
                     f"Participant: {escape(label)}<br>"
                     "Grid level=%{customdata[0]}<br>"
                     "Dataset=%{customdata[1]}<br>"
-                    "log(h/h_L1)=%{x:.6g}<br>"
+                    "h = N^(-1/3)=%{x:.6g}<br>"
                     "Q_c'=%{y:.6g} W/m<extra></extra>"
                 ),
             ))
             trace_count += 1
 
-    style_xy_figure(fig, case_id, "qc_prime", "log(h/h<sub>L1</sub>) [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
+    style_xy_figure(fig, case_id, "qc_prime", "h = N<sup>−1/3</sup> [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
     style_grid_level_x_axis(fig, case_id)
     fig.update_yaxes(autorange="reversed")
     apply_individual_plot_overrides(fig, case_id, "qc_prime")
@@ -2387,7 +2408,6 @@ def _build_ae3933_mass_comparison_metric(participants, requirement: str, mass_ki
         style_grid_level_x_axis(difference_fig, comparison_case)
         style_xy_figure(percent_fig, comparison_case, f"ae3933_minus_ae3932_{mass_kind}_mass_percent", "Grid level", f"{mass_label}-mass difference relative to AE3932 [%]")
         style_grid_level_x_axis(percent_fig, comparison_case)
-        difference_fig.add_hline(y=0.0, line_dash="dash", line_color="black", line_width=1.5)
         percent_fig.add_hline(y=0.0, line_dash="dash", line_color="black", line_width=1.5)
         for fig in (difference_fig, percent_fig):
             for trace in fig.data:

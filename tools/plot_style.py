@@ -61,7 +61,7 @@ GRID_CONVERGENCE_NORMALIZATION: dict[str, Any] = {
     # Finest grid first, progressing toward the coarsest grid.
     "grid_order": ["L1", "L2", "L3", "L4"],
     "grid_axis_title": "Grid level",
-    "grid_coordinate_axis_title": "log(h/h<sub>L1</sub>) [-]",
+    "grid_coordinate_axis_title": "h = N<sup>−1/3</sup> [-]",
     "axis_title_suffix": "relative difference from L1 [%]",
     "hover_label": "Relative difference from L1",
     "hover_format": ".4g",

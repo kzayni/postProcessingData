@@ -12,6 +12,7 @@ The data reader/scanner remains gatherParticipantData.py.
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 from html import escape
 import html
@@ -326,7 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         await Plotly.downloadImage(graph, {
           format: "png",
-          filename: `${filename}_${withLegend ? "with_legend" : "without_legend"}`,
+          filename: filename,
           width: downloadWidth,
           height: downloadHeight,
           scale: 3,
@@ -1964,45 +1965,67 @@ def write_png_plots(
     iceshape_builder.flush_png_exports(scale=scale)
 
 
+# Add curated presentation figures using this format:
+#
+#   "CATEGORY/output_filename.png": (
+#       "CASE_ID",
+#       "generated_source_filename.png",
+#   ),
+#
+# - CATEGORY is the destination folder under FIGURES, for example AERODYNAMIC,
+#   HTC, ICE_ACCRETION, IMPINGEMENT, or SURF_TEMP_FF.
+# - CASE_ID identifies the staging folder that creates the source plot, for
+#   example TC_NACA0012_AE3932 or TC_NACA0012_AE3933.
+# - generated_source_filename.png must exactly match the PNG filename produced
+#   by the normal plot builder before it is copied into the curated list.
+# - The dictionary key is the final relative path under FIGURES. Legend
+#   visibility does not change the filename.
+#
+# Example:
+#   "ICE_ACCRETION/tc_naca0012_ae3933_ice_to_water_ratio_vs_n_required_bins15.png": (
+#       "TC_NACA0012_AE3933",
+#       "tc_naca0012_ae3933_ice_to_water_ratio_vs_n_required_bins15.png",
+#   ),
 NACA0012_PRESENTATION_FIGURES: dict[str, tuple[str, str]] = {
     # AERODYNAMIC
-    "AERODYNAMIC/tc_naca0012_ae3932_L1_cp_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_cp_vs_s_slice_0p9144_all_roughness.png"),
-    "AERODYNAMIC/tc_naca0012_ae3932_L1_cp_vs_x_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_cp_vs_x_slice_0p9144_all_roughness.png"),
-    "AERODYNAMIC/tc_naca0012_ae3932_cd_vs_n_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cd_vs_n_all_roughness.png"),
-    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness.png"),
-    "AERODYNAMIC/tc_naca0012_ae3932_cmy_vs_n_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cmy_vs_n_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_L1_cp_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_cp_vs_s_slice_0p9144_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_L1_cp_vs_x_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_cp_vs_x_slice_0p9144_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_cd_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cd_vs_n_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_cmy_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cmy_vs_n_all_roughness.png"),
     # HTC
-    "HTC/tc_naca0012_ae3932_L1_htc_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_htc_vs_s_slice_0p9144_all_roughness.png"),
-    "HTC/tc_naca0012_ae3932_L1_recovery_temperature_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_recovery_temperature_vs_s_slice_0p9144_all_roughness.png"),
-    "HTC/tc_naca0012_ae3932_qc_prime_vs_n_y_0.9144_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_qc_prime_vs_n_y_0.9144.png"),
+    "HTC/tc_naca0012_ae3932_L1_htc_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_htc_vs_s_slice_0p9144_all_roughness.png"),
+    "HTC/tc_naca0012_ae3932_L1_recovery_temperature_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_recovery_temperature_vs_s_slice_0p9144_all_roughness.png"),
+    "HTC/tc_naca0012_ae3932_qc_prime_vs_n_y_0.9144.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_qc_prime_vs_n_y_0.9144.png"),
     # ICE ACCRETION — AE3932
-    "ICE_ACCRETION/tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3932_ice_mass_vs_n_unspecified_bins15_all_grid_levels_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3932_ice_to_water_ratio_vs_n_required_bins15_with_legend(1).png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_to_water_ratio_vs_n_required_bins15.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3932_upper_horn_angle_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_upper_horn_angle_bins15.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3932_upper_horn_angle_distribution_convergence_l1_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_upper_horn_angle_distribution_convergence_l1.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_to_water_ratio_vs_n_required_bins15.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_upper_horn_angle_bins15.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_upper_horn_angle_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_upper_horn_angle_distribution_convergence_l1.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_upper_horn_angle_distribution_convergence_l1.png"),
     # ICE ACCRETION — AE3933
-    "ICE_ACCRETION/tc_naca0012_ae3933_L1_multilayer_ice_shape_slice_0p9144_bins01_roughness_unspecified_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_multilayer_ice_shape_slice_0p9144_bins01_roughness_unspecified.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_difference_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_difference.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_ice_mass_vs_n_unspecified_bins15_all_grid_levels_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_upper_horn_angle_bins15_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_upper_horn_angle_bins15.png"),
-    "ICE_ACCRETION/tc_naca0012_ae3933_upper_horn_angle_distribution_convergence_l1_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_upper_horn_angle_distribution_convergence_l1.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_L1_multilayer_ice_shape_slice_0p9144_bins01_roughness_unspecified.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_multilayer_ice_shape_slice_0p9144_bins01_roughness_unspecified.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_difference.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_difference.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_to_water_ratio_vs_n_required_bins15.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_upper_horn_angle_bins15.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_upper_horn_angle_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_upper_horn_angle_distribution_convergence_l1.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_upper_horn_angle_distribution_convergence_l1.png"),
     # IMPINGEMENT
-    "IMPINGEMENT/tc_naca0012_ae3932_L1_beta_bins15_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_beta_bins15_vs_s_slice_0p9144_all_roughness.png"),
-    "IMPINGEMENT/tc_naca0012_ae3932_beta_max_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_beta_max_bins15.png"),
-    "IMPINGEMENT/tc_naca0012_ae3932_water_mass_vs_n_unspecified_bins15_all_grid_levels_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_water_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
-    "IMPINGEMENT/tc_naca0012_ae3932_water_mass_vs_n_unspecified_l1_vs_inverse_bins_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_water_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
-    "IMPINGEMENT/tc_naca0012_ae3932_width_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_width_bins15.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_L1_beta_bins15_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_beta_bins15_vs_s_slice_0p9144_all_roughness.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_beta_max_bins15.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_beta_max_bins15.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_water_mass_vs_n_unspecified_bins15_all_grid_levels.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_water_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_water_mass_vs_n_unspecified_l1_vs_inverse_bins.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_water_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_width_bins15.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_width_bins15.png"),
     # SURFACE TEMPERATURE / FREEZING FRACTION
-    "SURF_TEMP_FF/tc_naca0012_ae3932_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png"),
-    "SURF_TEMP_FF/tc_naca0012_ae3932_L1_surface_temperature_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png"),
-    "SURF_TEMP_FF/tc_naca0012_ae3933_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png"),
-    "SURF_TEMP_FF/tc_naca0012_ae3933_L1_surface_temperature_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3932_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3932_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3933_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3933_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png"),
 }
 
 
@@ -2037,7 +2060,33 @@ def write_naca0012_presentation_figures(participants, output_dir: Path) -> None:
             re.IGNORECASE,
         )
         for module in (convergence_data_builder, cutdata_builder, iceshape_builder):
-            for figure, _ in module.PNG_EXPORT_QUEUE:
+            for figure, export_path in module.PNG_EXPORT_QUEUE:
+                if export_path.name.endswith("_cd_vs_n_all_roughness.png"):
+                    figure.data = tuple(
+                        trace
+                        for trace in figure.data
+                        if "No Roughness" in (
+                            (getattr(trace, "meta", None) or {}).get("ipw3_roughness_labels", [])
+                            if isinstance(getattr(trace, "meta", None), dict)
+                            else []
+                        )
+                    )
+                ice_mass_y_min_by_case = {
+                    "TC_NACA0012_AE3932": 80.0,
+                    "TC_NACA0012_AE3933": 80.0,
+                }
+                case_id = export_path.parent.name
+                if "_ice_mass_vs_n_" in export_path.name and case_id in ice_mass_y_min_by_case:
+                    y_min = ice_mass_y_min_by_case[case_id]
+                    finite_y_values = [
+                        float(value)
+                        for trace in figure.data
+                        for value in (trace.y if trace.y is not None else [])
+                        if value is not None and math.isfinite(float(value))
+                    ]
+                    y_max = max(finite_y_values, default=y_min + 10.0)
+                    y_span = max(y_max - y_min, 1.0)
+                    figure.update_yaxes(range=[y_min, y_max + 0.05 * y_span], autorange=False)
                 for trace in figure.data:
                     if trace.name:
                         name_parts = [part.strip() for part in str(trace.name).split(" | ")]
