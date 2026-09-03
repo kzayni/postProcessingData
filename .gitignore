@@ -1,6 +1,7 @@
 __pycache__
 .DS_Store
 PREVIEW*
+FIGURES*
 
 TEMPLATE_LATEX*
 # Generated post-processing sidecar mappings/caches

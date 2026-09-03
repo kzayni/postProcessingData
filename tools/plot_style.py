@@ -60,7 +60,8 @@ GRID_CONVERGENCE_NORMALIZATION: dict[str, Any] = {
     "reference_grid_level": "L1",
     # Finest grid first, progressing toward the coarsest grid.
     "grid_order": ["L1", "L2", "L3", "L4"],
-    "grid_axis_title": "Grid level<br><span style='font-size:14px'>← Finer&nbsp;&nbsp;|&nbsp;&nbsp;Coarser →</span>",
+    "grid_axis_title": "Grid level",
+    "grid_coordinate_axis_title": "log(h/h<sub>L1</sub>) [-]",
     "axis_title_suffix": "relative difference from L1 [%]",
     "hover_label": "Relative difference from L1",
     "hover_format": ".4g",
@@ -68,10 +69,6 @@ GRID_CONVERGENCE_NORMALIZATION: dict[str, Any] = {
     "initial_y_range": [-5.0, 5.0],
     "range_padding_fraction": 0.10,
     "reference_line": {"color": "black", "width": 1.5, "dash": "dash"},
-    # Generate the alternative CL heatmap at this number of visible traces.
-    "cl_heatmap_trace_threshold": 10,
-    "heatmap_colorscale": "RdBu_r",
-    "heatmap_show_values": True,
 }
 
 
@@ -186,9 +183,13 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             # Water Mass Analysis: collection efficiency and impingement extent
             "beta_max_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
             "beta_max_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from L1 [%]"}}},
+            "peak_beta_s_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak β s position [m]"}}},
+            "peak_beta_s_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak β s-position difference from L1 [%]"}}},
             "impingement_width_vs_n": {"height": 520, "yaxis": {"title": {"text": "Surface impingement width [m]"}}},
             "impingement_width_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Impingement-width difference from L1 [%]"}}},
             "beta_max_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
+            "peak_beta_s_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Peak β s position [m]"}}},
+            "peak_beta_s_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Peak β s-position difference from 15 bins [%]"}}},
             "impingement_width_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Surface impingement width [m]"}}},
             "beta_max_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from 15 bins [%]"}}},
             "impingement_width_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Surface impingement-width difference from 15 bins [%]"}}},
@@ -281,9 +282,13 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             # Water Mass Analysis: collection efficiency and impingement extent
             "beta_max_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
             "beta_max_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from L1 [%]"}}},
+            "peak_beta_s_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak β s position [m]"}}},
+            "peak_beta_s_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak β s-position difference from L1 [%]"}}},
             "impingement_width_vs_n": {"height": 520, "yaxis": {"title": {"text": "Surface impingement width [m]"}}},
             "impingement_width_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Impingement-width difference from L1 [%]"}}},
             "beta_max_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
+            "peak_beta_s_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Peak β s position [m]"}}},
+            "peak_beta_s_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Peak β s-position difference from 15 bins [%]"}}},
             "impingement_width_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Surface impingement width [m]"}}},
             "beta_max_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from 15 bins [%]"}}},
             "impingement_width_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Surface impingement-width difference from 15 bins [%]"}}},

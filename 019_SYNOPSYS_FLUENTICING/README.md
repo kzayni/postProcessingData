@@ -10,100 +10,48 @@ Please remove any unused sections and adjust this README as needed for your subm
 
 **Name(s):**
 
-Add participant name(s) here.
+Isik Ozcer
 
 **Organization / Affiliation:**
 
-Add organization or affiliation here.
+Synopsys
 
 **Primary Email:**
 
-Add point-of-contact email here.
+isik.ozcer@synopsys.com
 
 
 ## Solver Information
 
 **Solver Name and Version:**
 
-Add solver name and version here.
+Fluent Icing v261
 
 **Flow Algorithm:**
 
-Describe the flow algorithm here.
+2nd order cell centered finite volume, Rhie-Chow
 
 **Turbulence Model:**
 
-Describe the turbulence model here, if applicable.
+NACA0012: S-A standard + Aupoix roughness
+OneraM6: kw-sst + Aupoix roughness
 
 **Droplet Trajectory Algorithm:**
 
-Describe the droplet trajectory algorithm here.
+DROP3D - Eulerian finite element
 
 **Thermodynamic Algorithm:**
 
-Describe the thermodynamic algorithm here.
+ICE3D: SWIM + proprietary modifications
+(Eulerian wall film flow, continuity and energy eq only, Messinger + mods for thermo)
 
 **Surface Grid Deformation Algorithm:**
 
-Describe the surface grid deformation algorithm here.
+ICE3D: Lagrangian
 
 **Multi-Layer / Multi-Time-Step Methodology:**
 
-Describe the multi-layer or multi-time-step methodology here.
-
-## Grid Information
-
-Only complete this section if you used grids that are different from the committee-supplied grids.
-
-### `TC_NACA0D012_AE3932_D01`
-
-**Grid Type:**
-
-Add grid type here (structured, unstructured, or overset).
-
-**Grid Generator:**
-
-Add grid generator name and version here.
-
-| Grid size | `L1` | `L2` | `L3` | `L4` |
-| --- | --- | --- | --- | --- |
-| Total cells |  |  |  |  |
-| Total nodes |  |  |  |  |
-
-### `TC_NACA0D012_AE3933_D01`
-
-**Grid Type:**
-
-Add grid type here (structured, unstructured, or overset).
-
-**Grid Generator:**
-
-Add grid generator name and version here.
-
-| Grid size | `L1` | `L2` | `L3` | `L4` |
-| --- | --- | --- | --- | --- |
-| Total cells |  |  |  |  |
-| Total nodes |  |  |  |  |
-
-### `TC_ONERAM6_D01`
-
-**Grid Type:**
-
-Add grid type here (structured, unstructured, or overset).
-
-**Grid Generator:**
-
-Add grid generator name and version here.
-
-| Grid size | `L1` | `L2` | `L3` | `L4` |
-| --- | --- | --- | --- | --- |
-| Total cells |  |  |  |  |
-| Total nodes |  |  |  |  |
-
-**Additional Grid Notes:**
-
-Add any additional information needed to describe the non-committee grids here.
-
+quasi-steady multi-shot method, with surface remeshing and shrink wrapping
 
 ## Other Information
 
@@ -116,5 +64,5 @@ Please provide relevant articles, papers, reports, or other references related t
 Example format:
 
 ```text
-Author(s), "Title," Journal/Conference/Report, Year. DOI or URL if available.
+Ozcer, I. A., & Moula, G. (2024). Ansys Results for the 2nd AIAA Ice Prediction Workshop. AIAA AVIATION FORUM AND ASCEND co-located Conference Proceedings. https://doi.org/10.2514/6.2024-3605
 ```

@@ -17,8 +17,9 @@ from html import escape
 import html
 import re
 import shutil
+import tempfile
 
-from tools.gatherParticipantData import CASE_SLICES, VALID_CASES, VALID_GRID_LEVELS, HighlightPointsByCase, collect_case_ids, scan_all_participants
+from tools.gatherParticipantData import CASE_SLICES, VALID_CASES, VALID_GRID_LEVELS, HighlightPointsByCase, cleanup_generated_sidecars, collect_case_ids, scan_all_participants
 from tools.cutdata_builder import build_combined_levels_cutdata_section, build_grid_level_cutdata_plots
 from tools.iceshape_builder import build_combined_levels_ice_shape_section, build_ice_shape_section
 from tools.convergence_data_builder import build_ae3933_ice_mass_comparison_section, build_beta_max_analysis_section, build_grid_convergence_section, build_water_mass_analysis_section
@@ -310,6 +311,8 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       const filename = shell.dataset.plotFilename || "plot";
       const title = shell.dataset.plotTitle || "";
+      const downloadWidth = Number(shell.dataset.downloadWidth) || 1350;
+      const downloadHeight = Number(shell.dataset.downloadHeight) || 900;
       button.disabled = true;
 
       try {
@@ -324,8 +327,8 @@ document.addEventListener("DOMContentLoaded", () => {
         await Plotly.downloadImage(graph, {
           format: "png",
           filename: `${filename}_${withLegend ? "with_legend" : "without_legend"}`,
-          width: 1350,
-          height: 900,
+          width: downloadWidth,
+          height: downloadHeight,
           scale: 3,
         });
       } finally {
@@ -1333,7 +1336,44 @@ def build_page_navigation(case_ids: list[str], current_case_id: str | None = Non
     """
 
 
-def build_case_index_section(case_ids: list[str]) -> str:
+def build_submission_matrix_section(participants, case_ids: list[str]) -> str:
+    """Summarize which participant/case/grid-level combinations were submitted."""
+    grid_levels = sorted(VALID_GRID_LEVELS)
+    case_tables = ""
+    for case_id in case_ids:
+        rows = ""
+        for participant in participants:
+            case_data = participant.cases.get(case_id)
+            cells = ""
+            for grid_level in grid_levels:
+                grid_data = case_data.grid_levels.get(grid_level) if case_data is not None else None
+                submitted = bool(
+                    grid_data is not None
+                    and (grid_data.datasets or grid_data.other_files)
+                )
+                cells += f'<td class="submission-status">{"x" if submitted else ""}</td>'
+            rows += f'<tr><th scope="row">{escape(participant.participant_id)}</th>{cells}</tr>'
+        case_tables += f"""
+        <article class="submission-matrix-card">
+          <h3>{escape(display_case_name(case_id))}</h3>
+          <div class="readme-table-wrapper">
+            <table class="participant-table submission-matrix">
+              <thead><tr><th>Participant</th>{''.join(f'<th>{escape(level)}</th>' for level in grid_levels)}</tr></thead>
+              <tbody>{rows}</tbody>
+            </table>
+          </div>
+        </article>
+        """
+    return f"""
+    <section class="participant-section submission-matrices-section">
+      <h2>Data Submission by Case and Grid Level</h2>
+      <p>An x indicates that at least one dataset or submitted file was found for that participant, case, and grid level.</p>
+      <div class="submission-matrices-grid">{case_tables}</div>
+    </section>
+    """
+
+
+def build_case_index_section(case_ids: list[str], participants=None) -> str:
     convergence_items = [
         ("CFD grid convergence", link_from_root(category_page_path("cfd_grid_convergence")), "Required (R) CFD data for NACA0012 or ONERA M6."),
         ("Icing grid convergence", link_from_root(category_page_path("icing_grid_convergence")), "Required (R) icing data for ONERA M6, AE3932, or AE3933."),
@@ -1345,12 +1385,13 @@ def build_case_index_section(case_ids: list[str]) -> str:
         grid_items if html_section_enabled("cutdata") or html_section_enabled("iceshape") else []
     )
 
-    return f"""
+    results_html = f"""
     <section class="participant-section">
       <h2>Results</h2>
       {build_link_list(items)}
     </section>
     """
+    return results_html + (build_submission_matrix_section(participants, case_ids) if participants is not None else "")
 
 
 def build_geometry_landing_content(geometry_id: str, case_ids: list[str]) -> str:
@@ -1846,11 +1887,17 @@ def parse_args() -> argparse.Namespace:
         epilog=VARIABLE_HELP,
     )
     parser.add_argument("--clean", action="store_true", help="Recompute cutData s mapping files instead of reusing existing *_sMap.dat files.")
+    parser.add_argument("--cleanup", action="store_true", help="Remove generated *_sMap.dat and *_rotated.dat sidecars, then exit without rebuilding.")
     parser.add_argument("--clear", action="store_true", help="Remove the selected output folder before creating the new build.")
     parser.add_argument("--p", "--participant", dest="participant_id", help="Build a preview containing only one participant ID, for example --p 004.")
     parser.add_argument("--slides", action="store_true", help="Build index.html as a one-plot-per-slide presentation with sidebar and previous/next controls.")
     parser.add_argument("--png", action="store_true", help="Export every generated plot as a PNG instead of building HTML pages.")
     parser.add_argument("--latex", action="store_true", help="Export PNG plots and compile them into a LaTeX preview PDF.")
+    parser.add_argument(
+        "--naca0012-pres",
+        action="store_true",
+        help="Export the curated NACA0012 presentation figures into FIGURES category folders.",
+    )
     parser.add_argument("--lower-res", action="store_true", help="Export PNGs at 1350x900 instead of the default 4050x2700. Used with --png or --latex.")
     parser.add_argument("--no-exp", action="store_true", help="Exclude experimental results from every generated plot.")
     parser.add_argument("--combined", action="store_true", help="Generate combined-level plots and pages.")
@@ -1915,6 +1962,121 @@ def write_png_plots(
     convergence_data_builder.flush_png_exports(scale=scale)
     cutdata_builder.flush_png_exports(scale=scale)
     iceshape_builder.flush_png_exports(scale=scale)
+
+
+NACA0012_PRESENTATION_FIGURES: dict[str, tuple[str, str]] = {
+    # AERODYNAMIC
+    "AERODYNAMIC/tc_naca0012_ae3932_L1_cp_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_cp_vs_s_slice_0p9144_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_L1_cp_vs_x_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_cp_vs_x_slice_0p9144_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_cd_vs_n_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cd_vs_n_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness.png"),
+    "AERODYNAMIC/tc_naca0012_ae3932_cmy_vs_n_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cmy_vs_n_all_roughness.png"),
+    # HTC
+    "HTC/tc_naca0012_ae3932_L1_htc_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_htc_vs_s_slice_0p9144_all_roughness.png"),
+    "HTC/tc_naca0012_ae3932_L1_recovery_temperature_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_recovery_temperature_vs_s_slice_0p9144_all_roughness.png"),
+    "HTC/tc_naca0012_ae3932_qc_prime_vs_n_y_0.9144_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_qc_prime_vs_n_y_0.9144.png"),
+    # ICE ACCRETION — AE3932
+    "ICE_ACCRETION/tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_mass_vs_n_unspecified_bins15_all_grid_levels_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_ice_to_water_ratio_vs_n_required_bins15_with_legend(1).png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_ice_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_upper_horn_angle_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_upper_horn_angle_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3932_upper_horn_angle_distribution_convergence_l1_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_upper_horn_angle_distribution_convergence_l1.png"),
+    # ICE ACCRETION — AE3933
+    "ICE_ACCRETION/tc_naca0012_ae3933_L1_multilayer_ice_shape_slice_0p9144_bins01_roughness_unspecified_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_multilayer_ice_shape_slice_0p9144_bins01_roughness_unspecified.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_difference_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_difference.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_mass_vs_n_unspecified_bins15_all_grid_levels_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_upper_horn_angle_bins15_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_upper_horn_angle_bins15.png"),
+    "ICE_ACCRETION/tc_naca0012_ae3933_upper_horn_angle_distribution_convergence_l1_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_upper_horn_angle_distribution_convergence_l1.png"),
+    # IMPINGEMENT
+    "IMPINGEMENT/tc_naca0012_ae3932_L1_beta_bins15_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_beta_bins15_vs_s_slice_0p9144_all_roughness.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_beta_max_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_beta_max_bins15.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_water_mass_vs_n_unspecified_bins15_all_grid_levels_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_water_mass_vs_n_unspecified_bins15_all_grid_levels.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_water_mass_vs_n_unspecified_l1_vs_inverse_bins_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_water_mass_vs_n_unspecified_l1_vs_inverse_bins.png"),
+    "IMPINGEMENT/tc_naca0012_ae3932_width_bins15_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_width_bins15.png"),
+    # SURFACE TEMPERATURE / FREEZING FRACTION
+    "SURF_TEMP_FF/tc_naca0012_ae3932_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3932_L1_surface_temperature_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3933_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_freezing_fraction_vs_s_slice_0p9144_all_roughness.png"),
+    "SURF_TEMP_FF/tc_naca0012_ae3933_L1_surface_temperature_vs_s_slice_0p9144_all_roughness_with_legend.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_surface_temperature_vs_s_slice_0p9144_all_roughness.png"),
+}
+
+
+def write_naca0012_presentation_figures(participants, output_dir: Path) -> None:
+    """Generate and route the curated NACA0012 plot set for the presentation."""
+    case_ids = ("TC_NACA0012_AE3932", "TC_NACA0012_AE3933")
+    with tempfile.TemporaryDirectory(prefix="ipw3_naca0012_pres_") as staging_text:
+        staging_dir = Path(staging_text)
+        cutdata_builder.clear_png_export_queue()
+        iceshape_builder.clear_png_export_queue()
+        convergence_data_builder.clear_png_export_queue()
+
+        for case_id in case_ids:
+            case_dir = staging_dir / case_id
+            cutdata_builder.set_png_export_dir(case_dir)
+            iceshape_builder.set_png_export_dir(case_dir)
+            convergence_data_builder.set_png_export_dir(case_dir)
+            build_grid_convergence_section(participants, case_id, category="cfd")
+            build_grid_convergence_section(participants, case_id, category="icing", requirement="required")
+            build_water_mass_analysis_section(participants, case_id)
+            build_beta_max_analysis_section(participants, case_id)
+            convergence_data_builder.build_upper_horn_angle_convergence_section(participants, case_id)
+            build_grid_page_content(participants, case_id, "L1")
+
+        convergence_data_builder.set_png_export_dir(staging_dir / "TC_NACA0012_AE3933")
+        build_ae3933_ice_mass_comparison_section(participants, requirement="required")
+
+        # Apply one presentation-ready canvas and legend treatment across all
+        # plot families before rasterization.
+        roughness_legend_part = re.compile(
+            r"(?:roughness|^no roughness$|^default roughness$|^variable roughness$|^unspecified roughness height$)",
+            re.IGNORECASE,
+        )
+        for module in (convergence_data_builder, cutdata_builder, iceshape_builder):
+            for figure, _ in module.PNG_EXPORT_QUEUE:
+                for trace in figure.data:
+                    if trace.name:
+                        name_parts = [part.strip() for part in str(trace.name).split(" | ")]
+                        filtered_parts = [part for part in name_parts if not roughness_legend_part.search(part)]
+                        trace.name = " | ".join(filtered_parts) or name_parts[0]
+                figure.update_layout(
+                    width=2000,
+                    height=700,
+                    showlegend=True,
+                    font={"family": "Arial, Helvetica, sans-serif", "size": 16},
+                    legend={
+                        "orientation": "h",
+                        "x": 0.0,
+                        "xanchor": "left",
+                        "y": 1.02,
+                        "yanchor": "bottom",
+                        "font": {"size": 12},
+                    },
+                    margin={"l": 100, "r": 50, "t": 125, "b": 85},
+                    paper_bgcolor="white",
+                    plot_bgcolor="white",
+                )
+
+        convergence_data_builder.flush_png_exports(scale=1, width=2000, height=700)
+        cutdata_builder.flush_png_exports(scale=1, width=2000, height=700)
+        iceshape_builder.flush_png_exports(scale=1, width=2000, height=700)
+
+        missing: list[str] = []
+        for destination_text, (case_id, source_name) in NACA0012_PRESENTATION_FIGURES.items():
+            source = staging_dir / case_id / source_name
+            destination = output_dir / destination_text
+            if not source.exists():
+                missing.append(f"{destination_text} <- {case_id}/{source_name}")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+
+        if missing:
+            raise RuntimeError("Missing presentation plot exports:\n  " + "\n  ".join(missing))
 
 
 def write_case_pages(participants, case_ids: list[str], combined: bool = False) -> None:
@@ -2151,6 +2313,12 @@ def write_case_pages(participants, case_ids: list[str], combined: bool = False) 
 def main() -> None:
     global HTML_BUILD_SECTIONS
     args = parse_args()
+    if args.cleanup:
+        removed = cleanup_generated_sidecars(ROOT_DIR, participant_id=args.participant_id)
+        print(f"Removed {len(removed)} generated sidecar file(s).")
+        return
+    if args.naca0012_pres and any((args.png, args.latex, args.slides, args.convergence, args.cutdata, args.iceshape)):
+        raise SystemExit("--naca0012-pres is a standalone export mode and cannot be combined with other output modes.")
     selected_html_sections = {
         section
         for section, selected in (
@@ -2194,12 +2362,21 @@ def main() -> None:
     }
     
     participants = load_participants(ROOT_DIR, highlight_points_by_case=highlight_points_by_case, clean_s_cache=args.clean, participant_id=args.participant_id)
+    convergence_data_builder.apply_participant_mass_conventions(participants)
     if args.participant_id is not None and not participants:
         requested_id = normalize_participant_id(args.participant_id)
         raise SystemExit(f"No participant folder found for ID {requested_id}.")
 
     case_ids = get_case_ids(participants)
     preview_name = preview_participant_name(args.participant_id) if args.participant_id is not None else PREVIEW_PARTICIPANT_NAME
+
+    if args.naca0012_pres:
+        if args.participant_id is not None:
+            raise SystemExit("--naca0012-pres requires the all-participant dataset; do not combine it with --participant.")
+        presentation_dir = ROOT_DIR / "FIGURES"
+        write_naca0012_presentation_figures(participants, presentation_dir)
+        print(f"Wrote {len(NACA0012_PRESENTATION_FIGURES)} NACA0012 presentation figures in {presentation_dir}")
+        return
 
     if args.png or args.latex:
         latex_output_dir = latex_output_dir_for_participant(args.participant_id) if args.latex else None
@@ -2233,7 +2410,7 @@ def main() -> None:
         return
 
     participants_table_html = build_participants_table(PARTICIPANTS, participant_id=args.participant_id)
-    case_index_html = build_case_index_section(case_ids)
+    case_index_html = build_case_index_section(case_ids, participants)
 
     # A filtered build replaces generated page files so excluded categories do
     # not remain as stale HTML from an earlier full build.

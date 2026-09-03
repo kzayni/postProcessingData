@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 from dataclasses import dataclass, replace
+import math
 from pathlib import Path
 import re
 
@@ -36,6 +37,29 @@ except ImportError:  # Allow ``python3 tools/heat_flux_computations.py``.
 
 ROOT = Path(__file__).resolve().parents[1]
 LEVELS = ("L1", "L2", "L3", "L4")
+
+
+def grid_cell_counts_for_case(case_id: str) -> dict[str, float]:
+    reference_name = "ONERAM6_GRID.dat" if "ONERAM6" in case_id.upper() else "NACA0012_GRID.dat"
+    reference_path = ROOT / "R00_REFERENCE" / reference_name
+    counts: dict[str, float] = {}
+    if not reference_path.exists():
+        return counts
+    for line in reference_path.read_text().splitlines():
+        values = line.strip().split()
+        if len(values) < 2:
+            continue
+        try:
+            level, num_cells = int(float(values[0])), float(values[1])
+        except ValueError:
+            continue
+        if level > 0 and num_cells > 0.0:
+            counts[f"L{level}"] = num_cells
+    return counts
+
+
+def grid_convergence_coordinate(num_cells: float, l1_num_cells: float) -> float:
+    return math.log(l1_num_cells / num_cells) / 3.0
 
 
 @dataclass(frozen=True)
@@ -235,12 +259,13 @@ def write_case_outputs(
             writer.writerow([participant, settings.ds_min, settings.ds_max,
                              *[f"{by_level[x]:.9g}" if x in by_level else "" for x in LEVELS]])
 
+    cell_counts = grid_cell_counts_for_case(case_id)
     fig = go.Figure()
     for participant, by_level in sorted(values.items()):
         available = [level for level in LEVELS if level in by_level]
         participant_id = participant.split("_", 1)[0]
         fig.add_scatter(
-            x=available,
+            x=[grid_convergence_coordinate(cell_counts[level], cell_counts["L1"]) for level in available],
             y=[by_level[level] for level in available],
             mode=participant_trace_mode(participant_id),
             name=participant_id,
@@ -248,42 +273,46 @@ def write_case_outputs(
             legendrank=participant_legend_rank(participant_id),
             line={"color": participant_color(participant_id)},
             marker=participant_marker(participant_id),
+            customdata=available,
+            hovertemplate="Grid level=%{customdata}<br>log(h/h_L1)=%{x:.6g}<br>Q_c'=%{y:.6g} W/m<extra></extra>",
         )
     window = f"ds = {settings.ds_min if settings.ds_min is not None else 'data min'} to " \
              f"{settings.ds_max if settings.ds_max is not None else 'data max'} m"
     apply_xy_style(
         fig,
         case_id,
-        "Grid level",
+        "log(h/h<sub>L1</sub>) [-]",
         "Q_c' = ∫ HTC (Ts − Trec) ds [W/m]",
         plot_family="convergence",
         plot_key="qc_prime",
-        height=900,
+        height=700,
     )
     fig.update_layout(
         title={"text": f"Integrated Convective Heat Transfer per Unit Span (Q_c') Grid Convergence | All Participants | {case_id}",
                "x": 0.5, "xanchor": "center"},
-        width=1350,
+        width=2000,
         margin={"l": 90, "r": 220, "t": 100, "b": 95},
         annotations=[{"text": window, "xref": "paper", "yref": "paper", "x": 0,
                       "y": -0.12, "showarrow": False}],
     )
     fig.update_xaxes(
-        categoryorder="array",
-        categoryarray=list(LEVELS),
-        title={"text": GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level")},
+        type="linear",
+        tickmode="array",
+        tickvals=[grid_convergence_coordinate(cell_counts[level], cell_counts["L1"]) for level in LEVELS],
+        ticktext=[f"{grid_convergence_coordinate(cell_counts[level], cell_counts['L1']):.3f}" for level in LEVELS],
+        title={"text": "log(h/h<sub>L1</sub>) [-]"},
     )
     fig.write_image(
         str(output_dir / f"ALL_PARTICIPANTS_{slug}_Qc_prime_grid_convergence.png"),
-        width=1350,
-        height=900,
+        width=2000,
+        height=700,
         scale=image_scale,
     )
     if GRID_CONVERGENCE_NORMALIZATION.get("enabled", True):
         relative_fig = go.Figure(fig)
         reference_level = str(GRID_CONVERGENCE_NORMALIZATION.get("reference_grid_level", "L1"))
         for trace in relative_fig.data:
-            levels = [str(level) for level in trace.x]
+            levels = [str(level) for level in trace.customdata]
             if reference_level not in levels:
                 trace.visible = "legendonly"
                 continue
@@ -298,8 +327,8 @@ def write_case_outputs(
         relative_fig.update_yaxes(title={"text": "Q_c' difference from L1 [%]"})
         relative_fig.write_image(
             str(output_dir / f"ALL_PARTICIPANTS_{slug}_Qc_prime_grid_convergence_relative_to_L1.png"),
-            width=1350,
-            height=900,
+            width=2000,
+            height=700,
             scale=image_scale,
         )
 

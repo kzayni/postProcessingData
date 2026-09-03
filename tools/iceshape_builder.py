@@ -320,11 +320,11 @@ def clear_png_export_queue() -> None:
     PNG_EXPORT_QUEUE.clear()
 
 
-def flush_png_exports(scale: int = 3) -> None:
+def flush_png_exports(scale: int = 3, width: int = 1350, height: int = 900) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=1350, height=900, scale=scale)
+    pio.write_images(list(figures), list(paths), width=width, height=height, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
@@ -442,13 +442,17 @@ def parse_ipw3_ice_shape_zone_name(zone_name: str) -> dict[str, str] | None:
         dataset_match = re.search(r"(?:^|_)(D\d+)(?:_|$)", tail, re.IGNORECASE)
         layer_match = re.search(r"(?:^|_)(L\d+|LAYER\d+)(?:_|$)", tail, re.IGNORECASE)
         shape_role_match = re.search(r"(?:^|_)(SINGLE_LAYER|FINAL_LAYER)(?:_|$)", tail, re.IGNORECASE)
+        variable_density = bool(re.search(r"(?:^|_)VAR_DENSITY(?:_|$)", tail, re.IGNORECASE))
         return {
             "type": "SLICE",
             "slice": match.group("slice"),
             "bins": (match.group("bins") or "BINSXX").upper(),
             "dataset": dataset_match.group(1).upper() if dataset_match is not None else "DXX",
             "layer": layer_match.group(1).upper() if layer_match is not None else "",
-            "shape_role": shape_role_match.group(1).upper() if shape_role_match is not None else "",
+            # Participant 019's variable-density contours are ice shapes but
+            # were submitted with CUTDATA_VAR_DENSITY in the zone title.
+            "shape_role": shape_role_match.group(1).upper() if shape_role_match is not None else ("SINGLE_LAYER" if variable_density else ""),
+            "density_model": "variable" if variable_density else "standard",
         }
 
     match = mccs_pattern.match(zone_name)
@@ -457,13 +461,15 @@ def parse_ipw3_ice_shape_zone_name(zone_name: str) -> dict[str, str] | None:
         dataset_match = re.search(r"(?:^|_)(D\d+)(?:_|$)", tail, re.IGNORECASE)
         layer_match = re.search(r"(?:^|_)(L\d+|LAYER\d+)(?:_|$)", tail, re.IGNORECASE)
         shape_role_match = re.search(r"(?:^|_)(SINGLE_LAYER|FINAL_LAYER)(?:_|$)", tail, re.IGNORECASE)
+        variable_density = bool(re.search(r"(?:^|_)VAR_DENSITY(?:_|$)", tail, re.IGNORECASE))
         return {
             "type": "MCCS",
             "slice": "",
             "bins": (match.group("bins") or "BINSXX").upper(),
             "dataset": dataset_match.group(1).upper() if dataset_match is not None else "DXX",
             "layer": layer_match.group(1).upper() if layer_match is not None else "",
-            "shape_role": shape_role_match.group(1).upper() if shape_role_match is not None else "",
+            "shape_role": shape_role_match.group(1).upper() if shape_role_match is not None else ("SINGLE_LAYER" if variable_density else ""),
+            "density_model": "variable" if variable_density else "standard",
         }
 
     return None
@@ -658,7 +664,7 @@ def upper_horn_geometry(
         horn_angle = math.degrees(math.atan2(
             horn_point[1] - reference_point[1],
             horn_point[0] - reference_point[0],
-        ))
+        )) % 360.0
         return reference_point, horn_point, horn_angle
     angle = 0.0 if is_onera else math.radians(NACA0012_ROTATION_DEGREES)
     dx, dz = x - leading_point[0], z - leading_point[1]
@@ -679,7 +685,9 @@ def upper_horn_geometry(
     horn_dx, horn_dz = horn_point[0] - leading_point[0], horn_point[1] - leading_point[1]
     # Report the horn direction in the submitted/plot coordinate system:
     # zero degrees is the positive global x-axis through the clean LE point.
-    horn_angle = math.degrees(math.atan2(horn_dz, horn_dx))
+    # Express the direction on [0, 360) so upper-horn rays just beyond the
+    # negative x-axis remain near 180 degrees instead of wrapping negative.
+    horn_angle = math.degrees(math.atan2(horn_dz, horn_dx)) % 360.0
     return leading_point, horn_point, horn_angle
 
 
@@ -967,6 +975,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 bins_id = zone_info["bins"]
                 shape_type = zone_info["type"]
                 shape_role = zone_info["shape_role"]
+                density_model = zone_info.get("density_model", "standard")
                 roughness_key = extract_roughness_key_from_zone_name(zone_name)
                 slice_position = None
 
@@ -982,6 +991,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 bins_id = "not specified"
                 shape_type = "unknown"
                 shape_role = ""
+                density_model = "standard"
                 roughness_key = "default_roughness"
                 slice_text = "unknown"
                 slice_position = None
@@ -1015,6 +1025,8 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
             trace_name = label
             if "NACA0012" in case_id.upper() and roughness_filter is None:
                 trace_name = f"{label} | {format_roughness_title(roughness_key)}"
+            if density_model == "variable":
+                trace_name += " | Variable density"
 
             fig.add_trace(
                 go.Scatter(
@@ -1024,7 +1036,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                 name=trace_name,
                 legendgroup=label,
                 legendrank=participant_legend_rank(participant.participant_id),
-                    line=dict(color=color),
+                    line={"color": color, "dash": "dash" if density_model == "variable" else "solid"},
                     marker=participant_marker(participant.participant_id, len(plot_data)),
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -1033,6 +1045,7 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
                         f"Source: finalIceShape / iceShape<br>"
                         f"Shape type: {escape(str(shape_type))}<br>"
                         f"Shape role: {escape(str(shape_role))}<br>"
+                        f"Density model: {escape(density_model.title())}<br>"
                         f"Distribution: {escape(display_bins_id(str(bins_id)))}<br>"
                         f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
                         f"Slice: {escape(str(slice_text))}<br>"

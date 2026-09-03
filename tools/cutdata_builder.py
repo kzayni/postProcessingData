@@ -380,11 +380,11 @@ def clear_png_export_queue() -> None:
     PNG_EXPORT_QUEUE.clear()
 
 
-def flush_png_exports(scale: int = 3) -> None:
+def flush_png_exports(scale: int = 3, width: int = 1350, height: int = 900) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=1350, height=900, scale=scale)
+    pio.write_images(list(figures), list(paths), width=width, height=height, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
@@ -1077,12 +1077,14 @@ def build_cutdata_figure(
             if data.empty:
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
-            invert_participant_019_s = (
-                case_id == "TC_ONERAM6"
-                and str(participant.participant_id).zfill(3) == "019"
-                and grid_level in {"L2", "L3", "L4"}
-                and (plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot)
-                and x_column.lower() == "s"
+            participant_is_019 = str(participant.participant_id).zfill(3) == "019"
+            invert_participant_019_s = participant_is_019 and x_column.lower() == "s" and (
+                (case_id.startswith("TC_NACA0012_") and plot_spec["plot_key"] != "cp_vs_s")
+                or (
+                    case_id == "TC_ONERAM6"
+                    and grid_level in {"L2", "L3", "L4"}
+                    and (plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot)
+                )
             )
             if invert_participant_019_s:
                 data[x_column] = -pd.to_numeric(data[x_column], errors="coerce")
@@ -1226,6 +1228,12 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
         or plot_spec.get("plot_key", "").startswith("beta_")
     ):
         details.append("For participant 019, the submitted L2-L4 HTC and Beta surface orientation is corrected by plotting against -s; Cp retains the original s orientation.")
+    if (
+        case_id.startswith("TC_NACA0012_")
+        and uses_surface_distance_axis(plot_spec)
+        and plot_spec.get("plot_key") != "cp_vs_s"
+    ):
+        details.append("For participant 019, the submitted surface orientation is corrected by plotting against -s; Cp retains its original s orientation.")
     details.append("Legend: Participant ID.")
     return " ".join(details)
 

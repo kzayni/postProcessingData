@@ -226,6 +226,7 @@ def participant_marker(participant_id: str | int, point_count: int | None = None
         "color": participant_color(normalized_id),
         "symbol": PARTICIPANT_MARKER_SHAPES.get(normalized_id, "circle"),
         "size": marker_size,
+        "line": {"color": "black", "width": 1.5},
     }
 
 

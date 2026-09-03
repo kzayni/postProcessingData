@@ -33,6 +33,8 @@ STATISTICAL_PLOT_STYLE: dict[str, Any] = {
     "box_line_width": 2,
     "marker_color": "#1f77b4",
     "marker_size": 7,
+    "marker_line_color": "black",
+    "marker_line_width": 1.5,
     "show_all_points": False,
     "jitter": 0.0,
     "point_position": 0.0,
@@ -150,7 +152,7 @@ def compute_grid_level_statistics(
             statistics[level] = {
                 "count": 0, "mean": None, "median": None, "standard_deviation": None,
                 "coefficient_of_variation": None,
-                "q1": None, "q3": None, "iqr": None,
+                "q1": None, "q3": None, "iqr": None, "relative_iqr": None,
             }
             continue
         q1, median, q3 = np.percentile(data, [25.0, 50.0, 75.0])
@@ -172,6 +174,11 @@ def compute_grid_level_statistics(
             "q1": float(q1),
             "q3": float(q3),
             "iqr": float(q3 - q1),
+            "relative_iqr": (
+                float(q3 - q1) / abs(float(median)) * 100.0
+                if not math.isclose(float(median), 0.0, abs_tol=1e-15)
+                else None
+            ),
         }
     return statistics
 
@@ -208,7 +215,11 @@ def build_grid_level_box_plot(
             fillcolor=style["box_fill_color"],
             width=style["box_width"],
             line={"color": style["box_line_color"], "width": style["box_line_width"]},
-            marker={"color": style["marker_color"], "size": style["marker_size"]},
+            marker={
+                "color": style["marker_color"],
+                "size": style["marker_size"],
+                "line": {"color": style["marker_line_color"], "width": style["marker_line_width"]},
+            },
             meta=[stats["count"], stats["mean"], stats["median"], std_text, cv_text, stats["q1"], stats["q3"], stats["iqr"]],
             hovertemplate=(
                 "Grid: " + level + "<br>Value=%{y:.6g}<br>"
@@ -237,7 +248,11 @@ def build_grid_level_box_plot(
                 pointpos=style["point_position"],
                 fillcolor="rgba(0,0,0,0)",
                 line={"color": "rgba(0,0,0,0)", "width": 0},
-                marker={"color": participant_color(participant_id), "size": style["marker_size"]},
+                marker={
+                    "color": participant_color(participant_id),
+                    "size": style["marker_size"],
+                    "line": {"color": style["marker_line_color"], "width": style["marker_line_width"]},
+                },
                 hoveron="points",
                 hovertemplate="Participant: %{customdata[0]}<br>Grid: " + level + "<br>Value=%{y:.6g}<extra></extra>",
             ))
@@ -247,7 +262,7 @@ def build_grid_level_box_plot(
         showlegend=False,
         boxmode="overlay",
         xaxis={
-            "title": {"text": "Grid level<br><span style='font-size:14px'>← Finer&nbsp;&nbsp;|&nbsp;&nbsp;Coarser →</span>", "font": {"size": style["axis_title_size"]}},
+            "title": {"text": "Grid level", "font": {"size": style["axis_title_size"]}},
             "categoryorder": "array", "categoryarray": order,
             "showline": True, "linecolor": "black", "linewidth": 2,
             "mirror": True, "showgrid": True, "gridcolor": style["gridcolor"],
@@ -289,7 +304,8 @@ def statistics_table_html(
             f"<td>{formatted(stats['standard_deviation'])}</td>"
             f"<td>{formatted_percent(stats['coefficient_of_variation'])}</td>"
             f"<td>{formatted(stats['q1'])}</td><td>{formatted(stats['q3'])}</td>"
-            f"<td>{formatted(stats['iqr'])}</td></tr>"
+            f"<td>{formatted(stats['iqr'])}</td>"
+            f"<td>{formatted_percent(stats['relative_iqr'])}</td></tr>"
         )
     if not rows:
         return ""
@@ -303,7 +319,7 @@ def statistics_table_html(
     <p class="plot-description statistical-participants">{participant_summary}</p>
     <div class="readme-table-wrapper">
       <table class="participant-table statistical-table">
-        <thead><tr><th>Grid</th><th>Mean{unit_suffix}</th><th>Median{unit_suffix}</th><th>Sample standard deviation{unit_suffix}</th><th>Coefficient of variation [%]</th><th>Q1{unit_suffix}</th><th>Q3{unit_suffix}</th><th>IQR{unit_suffix}</th></tr></thead>
+        <thead><tr><th>Grid</th><th>Mean{unit_suffix}</th><th>Median{unit_suffix}</th><th>Sample standard deviation{unit_suffix}</th><th>Coefficient of variation [%]</th><th>Q1{unit_suffix}</th><th>Q3{unit_suffix}</th><th>IQR{unit_suffix}</th><th>Relative IQR [%]</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
     </div>

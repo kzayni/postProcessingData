@@ -665,14 +665,17 @@ def curvilinear_mapping_path(cutdata_path: Path) -> Path:
     return cutdata_path.with_name(f"{cutdata_path.stem}_sMap.dat")
 
 
-SMAP_VERSION = "signed-common-frame-z-surface-v10"
+SMAP_VERSION = "signed-common-frame-z-surface-v11-already-rotated-019"
 
 
 def uses_rotated_naca_submission_frame(path: Path, case_id: str | None) -> bool:
     """Return whether a NACA cut must be returned from the submitted -4° frame."""
     resolved_case_id = (case_id or extract_case_id_from_name(path.name) or "").upper()
-    participant_001 = any(parent.name.startswith("001_") for parent in path.parents)
-    return "NACA0012" in resolved_case_id and not participant_001
+    participant_id = participant_id_from_submission_path(path)
+    # Participants 001 and 019 supplied NACA0012 coordinates in the common
+    # rotated frame already; rotating either submission again would be wrong.
+    already_rotated = participant_id in {"001", "019"}
+    return "NACA0012" in resolved_case_id and not already_rotated
 
 
 def add_naca_reference_s_mapping_coordinates(
@@ -887,6 +890,31 @@ def rotated_ice_shape_path(path: Path) -> Path:
     return path.with_name(f"{path.stem}_rotated.dat")
 
 
+def cleanup_generated_sidecars(root_dir: Path, participant_id: str | None = None) -> list[Path]:
+    """Remove generated s-mapping and rotated-airfoil sidecars.
+
+    Cleanup is deliberately restricted to participant directories so submitted
+    source files and reference data cannot be selected accidentally.
+    """
+    if participant_id is not None:
+        participant_dir = find_participant_folder_by_id(root_dir, participant_id)
+        participant_dirs = [participant_dir] if participant_dir is not None else []
+    else:
+        participant_dirs = sorted(
+            path for path in root_dir.iterdir()
+            if path.is_dir() and re.match(r"^\d{3}(?:_|$)", path.name)
+        )
+
+    generated_suffixes = ("_smap.dat", "_rotated.dat")
+    removed: list[Path] = []
+    for participant_dir in participant_dirs:
+        for path in participant_dir.rglob("*.dat"):
+            if path.name.lower().endswith(generated_suffixes):
+                path.unlink()
+                removed.append(path)
+    return removed
+
+
 def participant_id_from_submission_path(path: Path) -> str | None:
     """Extract a three-digit participant ID from a file or one of its parents."""
     for candidate in (path, *path.parents):
@@ -942,10 +970,10 @@ def rotate_naca0012_ice_shape(data: TecplotData) -> None:
 
 
 def rotated_ice_shape_path_for_plotting(path: Path, case_id: str | None, clean_cache: bool = False) -> Path:
-    """Create/use a rotated NACA0012 sidecar except for already-rotated CIRA data."""
+    """Create/use a rotated NACA0012 sidecar unless the submission is already rotated."""
     if case_id is None or "NACA0012" not in case_id.upper():
         return path
-    if participant_id_from_submission_path(path) == "001":
+    if participant_id_from_submission_path(path) in {"001", "019"}:
         return path
 
     output_path = rotated_ice_shape_path(path)
@@ -2087,6 +2115,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print the legacy detailed parsed-zone summary instead of the compact submission recap.",
     )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Remove generated *_sMap.dat and *_rotated.dat sidecars, then exit.",
+    )
     return parser.parse_args()
 
 
@@ -2094,6 +2127,11 @@ def main() -> None:
     """Scan participants from the current directory and print a summary."""
     args = parse_args()
     root_dir = args.root
+
+    if args.cleanup:
+        removed = cleanup_generated_sidecars(root_dir, participant_id=args.participant_id)
+        print(f"Removed {len(removed)} generated sidecar file(s).")
+        return
 
     log_step(f"Scanning participants in: {root_dir.resolve()}")
 

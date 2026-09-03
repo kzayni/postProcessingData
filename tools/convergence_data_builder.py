@@ -47,19 +47,19 @@ from .plot_style import (
 )
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
-    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
-    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
+    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
+    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
+    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
 
-    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
+    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
 ]
 
 WATER_MASS_ANALYSIS_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
-    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "(Ice + evaporated water mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
+    {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
+    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "(Ice + evaporated water mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
 ]
 
 CFD_GRID_CONVERGENCE_PLOTS = [
@@ -71,12 +71,12 @@ ICING_GRID_CONVERGENCE_PLOTS = [
     if plot_spec.get("combined_icing_plot", False) or plot_spec.get("icing_plot", False)
 ]
 OPTIONAL_ICING_DIAMETER_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "N<sup>-1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "log(h/h<sub>L1</sub>) [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
 ]
 
-GRID_SPACING_COLUMN = "N_NEGATIVE_ONE_THIRD"
+GRID_SPACING_COLUMN = "NORMALIZED_CHARACTERISTIC_GRID_SPACING"
 VARIABLE_FILTER: set[str] | None = None
 INCLUDE_QC = True
 
@@ -89,6 +89,28 @@ def set_variable_filter(variables: set[str] | None) -> None:
 def set_include_qc(include: bool) -> None:
     global INCLUDE_QC
     INCLUDE_QC = include
+
+
+def apply_participant_mass_conventions(participants) -> None:
+    """Apply participant-specific integrated-mass definitions before plotting."""
+    for participant in participants:
+        if str(participant.participant_id).split(".", 1)[0].zfill(3) != "007":
+            continue
+        for case_id, case_data in participant.cases.items():
+            if not case_id.startswith("TC_NACA0012_") or case_data.grid_convergence_data is None:
+                continue
+            for zone in case_data.grid_convergence_data.zones.values():
+                water_column = find_column_case_insensitive(zone.data.columns, ["WATER_MASS", "WaterMass"])
+                ice_column = find_column_case_insensitive(zone.data.columns, ["ICE_MASS", "IceMass"])
+                evaporation_column = find_column_case_insensitive(
+                    zone.data.columns, ["WATER_EVAP_MASS", "WaterEvapMass"],
+                )
+                if water_column is None or ice_column is None or evaporation_column is None:
+                    continue
+                water = pd.to_numeric(zone.data[water_column], errors="coerce")
+                ice = pd.to_numeric(zone.data[ice_column], errors="coerce")
+                valid = np.isfinite(water) & np.isfinite(ice) & (water > -998.0) & (ice > -998.0)
+                zone.data.loc[valid, evaporation_column] = water[valid] - ice[valid]
 
 
 def plot_matches_variable_filter(plot_spec: dict[str, Any]) -> bool:
@@ -278,7 +300,12 @@ def participant_label(participant) -> str:
 
 
 def format_x_hover_label(x_column: str) -> str:
-    return "N^(-1/3)" if x_column == GRID_SPACING_COLUMN else x_column
+    return "log(h/h_L1)" if x_column == GRID_SPACING_COLUMN else x_column
+
+
+def grid_convergence_coordinate(num_cells: float, l1_num_cells: float) -> float:
+    """Return log-normalized characteristic spacing for a three-dimensional mesh."""
+    return math.log(l1_num_cells / num_cells) / 3.0
 
 
 def grid_level_number_from_value(value: Any) -> int | None:
@@ -293,7 +320,8 @@ def grid_level_number_from_value(value: Any) -> int | None:
 
 def add_grid_spacing_column(data, case_id: str, x_column: str, grid_column: str | None = None):
     grid_cell_counts = grid_cell_counts_for_case(case_id)
-    if not grid_cell_counts:
+    l1_num_cells = grid_cell_counts.get(1)
+    if not grid_cell_counts or l1_num_cells is None:
         return data.iloc[0:0].copy()
 
     working_data = data.copy()
@@ -317,7 +345,7 @@ def add_grid_spacing_column(data, case_id: str, x_column: str, grid_column: str 
 
         grid_levels.append(f"L{level_number}")
         num_cells_values.append(num_cells)
-        grid_spacing_values.append(num_cells ** (-1.0 / 3.0))
+        grid_spacing_values.append(grid_convergence_coordinate(num_cells, l1_num_cells))
 
     working_data["GRID_LEVEL_DISPLAY"] = grid_levels
     working_data["GRID_CELL_COUNT"] = num_cells_values
@@ -329,7 +357,7 @@ def plotly_config(filename: str) -> dict[str, Any]:
     return {
         "responsive": True,
         "displaylogo": False,
-        "toImageButtonOptions": {"format": "png", "filename": filename, "height": 900, "width": 1200, "scale": 3},
+        "toImageButtonOptions": {"format": "png", "filename": filename, "height": 700, "width": 2000, "scale": 3},
     }
 
 
@@ -352,16 +380,20 @@ def clear_png_export_queue() -> None:
     PNG_EXPORT_QUEUE.clear()
 
 
-def flush_png_exports(scale: int = 3) -> None:
+def flush_png_exports(scale: int = 3, width: int = 2000, height: int = 700) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=1350, height=900, scale=scale)
+    pio.write_images(list(figures), list(paths), width=width, height=height, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
 def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
     if PNG_EXPORT_DIR is not None:
+        # PNG deliverables contain submitted/absolute values only. Relative
+        # panels and across-participant box plots remain available in HTML.
+        if any(token in filename for token in ("_relative_to_l1", "_relative_to_bins15", "_statistics_boxplot")):
+            return ""
         PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
         png_fig = go.Figure(fig)
         png_fig.update_layout(
@@ -385,7 +417,7 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
         )
         return f'<iframe class="plotly-lazy-frame" data-plot-src="PLOTS/{escape(filename)}.html" title="{escape(filename)}"></iframe><div class="plot-loading">Plot queued…</div>'
     return f"""
-    <div class="plot-download-shell" data-plot-filename="{escape(filename)}" data-plot-title="{escape(plot_title)}">
+    <div class="plot-download-shell" data-plot-filename="{escape(filename)}" data-plot-title="{escape(plot_title)}" data-download-width="2000" data-download-height="700">
       {figure_html}
       <div class="plot-download-actions">
         <button type="button" data-plot-download="with-legend">Download PNG with legend</button>
@@ -395,10 +427,9 @@ def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
     """
 
 
-def style_xy_figure(fig: go.Figure, case_id: str, plot_key: str, x_label: str, y_label: str, height: int = 520) -> go.Figure:
-    x_title = f"{x_label} <br><span style='font-size:14px'>&lt;- Finer (more cells)&nbsp;&nbsp;|&nbsp;&nbsp;Coarser (fewer cells) -&gt;</span>"
-    apply_xy_style(fig, case_id, x_title, y_label, plot_family="convergence", plot_key=plot_key, height=height)
-    fig.update_xaxes(type="log", dtick="D2", tickformat=".2e", exponentformat="power", showexponent="all", automargin=True)
+def style_xy_figure(fig: go.Figure, case_id: str, plot_key: str, x_label: str, y_label: str, height: int = 430) -> go.Figure:
+    apply_xy_style(fig, case_id, x_label, y_label, plot_family="convergence", plot_key=plot_key, height=height)
+    fig.update_xaxes(type="linear", tickformat=".4g", automargin=True)
     fig.update_yaxes(automargin=True)
     fig.update_layout(margin=dict(l=90, r=220, t=30, b=95))
     return fig
@@ -410,20 +441,23 @@ def style_grid_level_x_axis(fig: go.Figure, case_id: str) -> go.Figure:
     levels = sorted(counts)
     if not levels:
         return fig
-    tick_values = [counts[level] ** (-1.0 / 3.0) for level in levels]
+    l1_num_cells = counts.get(1)
+    if l1_num_cells is None:
+        return fig
+    tick_values = [grid_convergence_coordinate(counts[level], l1_num_cells) for level in levels]
     fig.update_xaxes(
-        type="log",
+        type="linear",
         tickmode="array",
         tickvals=tick_values,
-        ticktext=[f"L{level}" for level in levels],
+        ticktext=[f"{value:.3f}" for value in tick_values],
         range=[
-            min(math.log10(value) for value in tick_values) - 0.04,
-            max(math.log10(value) for value in tick_values) + 0.04,
+            min(tick_values) - 0.5,
+            max(tick_values) + 0.5,
         ],
         title=dict(
             text=GRID_CONVERGENCE_NORMALIZATION.get(
-                "grid_axis_title",
-                "Grid level<br><span style='font-size:14px'>← Finer&nbsp;&nbsp;|&nbsp;&nbsp;Coarser →</span>",
+                "grid_coordinate_axis_title",
+                "log(h/h<sub>L1</sub>) [-]",
             ),
             font=dict(size=18),
         ),
@@ -434,7 +468,7 @@ def style_grid_level_x_axis(fig: go.Figure, case_id: str) -> go.Figure:
 def harmonize_comparison_figure(fig: go.Figure, x_order: list[str], x_title: str) -> go.Figure:
     """Apply the shared compact style used by paired convergence plots."""
     fig.update_layout(
-        height=430,
+        height=360,
         margin={"l": 110, "r": 20, "t": 80, "b": 75},
         legend={
             "orientation": "h", "x": 0.0, "xanchor": "left",
@@ -464,7 +498,7 @@ def style_relative_difference_figure(fig: go.Figure) -> go.Figure:
     return fig
 
 
-def style_inverse_bin_figure(fig: go.Figure, case_id: str, plot_key: str, y_label: str, height: int = 520) -> go.Figure:
+def style_inverse_bin_figure(fig: go.Figure, case_id: str, plot_key: str, y_label: str, height: int = 430) -> go.Figure:
     apply_xy_style(fig, case_id, "Droplet distribution", y_label, plot_family="convergence", plot_key=plot_key, height=height)
     fig.update_xaxes(type="log", range=[-1.25, 0.05], tickmode="array", tickvals=[1.0 / 15.0, 1.0 / 7.0, 1.0 / 3.0, 1.0], ticktext=["15-bin", "7-bin", "3-bin", "1-bin"])
     fig.update_layout(margin=dict(l=90, r=220, t=30, b=95))
@@ -526,13 +560,13 @@ def normalize_grid_convergence_to_l1(fig: go.Figure) -> list[str]:
                 all_relative_values.append(relative_value)
 
         rows_by_level = {
-            str(row[0]).strip().upper(): (row, relative_value)
-            for row, relative_value in zip(custom_rows, normalized_y)
+            str(row[0]).strip().upper(): (x_value, row, relative_value)
+            for x_value, row, relative_value in zip(trace.x, custom_rows, normalized_y)
         }
         ordered_levels = [level for level in grid_order if level in rows_by_level]
-        trace.x = ordered_levels
-        trace.customdata = [rows_by_level[level][0] for level in ordered_levels]
-        trace.y = [rows_by_level[level][1] for level in ordered_levels]
+        trace.x = [rows_by_level[level][0] for level in ordered_levels]
+        trace.customdata = [rows_by_level[level][1] for level in ordered_levels]
+        trace.y = [rows_by_level[level][2] for level in ordered_levels]
         trace.mode = "lines+markers"
         hover = str(trace.hovertemplate or "")
         hover = re.sub(
@@ -552,17 +586,6 @@ def normalize_grid_convergence_to_l1(fig: go.Figure) -> list[str]:
     data_bound = max((abs(value) for value in all_relative_values), default=0.0)
     padding = 1.0 + float(settings.get("range_padding_fraction", 0.10))
     y_bound = max(initial_bound, data_bound * padding)
-    fig.update_xaxes(
-        type="category",
-        categoryorder="array",
-        categoryarray=grid_order,
-        tickmode="array",
-        tickvals=grid_order,
-        ticktext=grid_order,
-        range=None,
-        autorange=True,
-        title={"text": settings.get("grid_axis_title", "Grid level")},
-    )
     fig.update_yaxes(range=[-y_bound, y_bound], autorange=False)
     reference_line = settings.get("reference_line", {})
     fig.add_hline(
@@ -606,7 +629,7 @@ def grid_statistics_html(
         return ""
     if compact_parts:
         box_fig.update_layout(
-            height=430,
+            height=360,
             margin={"l": 110, "r": 20, "t": 80, "b": 75},
         )
     table_html = f"""
@@ -652,18 +675,11 @@ def grid_convergence_figure_pair_html(
         str(level).upper()
         for level in GRID_CONVERGENCE_NORMALIZATION.get("grid_order", ["L1", "L2", "L3", "L4"])
     ]
-    for trace in fig.data:
-        if trace.customdata is not None:
-            levels = [str(row[0]).strip().upper() for row in trace.customdata]
-            if trace.x is not None and len(levels) == len(trace.x):
-                trace.x = levels
-        elif trace.x is not None and len(trace.x) == len(grid_order):
-            # Constant experimental reference traces have no customdata.
-            trace.x = grid_order
     harmonize_comparison_figure(
         fig, grid_order,
         GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level"),
     )
+    style_grid_level_x_axis(fig, case_id)
     absolute_html = figure_to_html_div(fig, filename=filename, plot_title=plot_title)
     # Experimental horn angles are constant physical reference lines.  Keep
     # them on the raw plot, but do not treat them as participant grid series
@@ -699,6 +715,7 @@ def grid_convergence_figure_pair_html(
         relative_fig, grid_order,
         GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level"),
     )
+    style_grid_level_x_axis(relative_fig, case_id)
     if plot_key in {"cl_vs_n", "cd_vs_n", "cmy_vs_n"}:
         style_relative_difference_figure(relative_fig)
         # Absolute coefficient plots use very small fixed tick intervals.
@@ -729,47 +746,6 @@ def grid_convergence_figure_pair_html(
             for name in sorted(set(missing_l1))
         ) + "</ul>"
 
-    heatmap_html = ""
-    visible_traces = [trace for trace in relative_fig.data if trace.visible != "legendonly" and trace.y is not None]
-    heatmap_threshold = int(GRID_CONVERGENCE_NORMALIZATION.get("cl_heatmap_trace_threshold", 10))
-    if plot_key == "cl_vs_n" and len(visible_traces) >= heatmap_threshold:
-        grid_order = [str(level) for level in GRID_CONVERGENCE_NORMALIZATION.get("grid_order", ["L1", "L2", "L3", "L4"])]
-        heatmap_values: list[list[float | None]] = []
-        row_labels: list[str] = []
-        for trace in visible_traces:
-            values_by_level = {str(level): value for level, value in zip(trace.x, trace.y)}
-            heatmap_values.append([values_by_level.get(level) for level in grid_order])
-            row_labels.append(str(trace.name))
-
-        finite_values = [abs(float(value)) for row in heatmap_values for value in row if value is not None and math.isfinite(float(value))]
-        color_bound = max(finite_values, default=5.0)
-        heatmap_fig = go.Figure(go.Heatmap(
-            x=grid_order,
-            y=row_labels,
-            z=heatmap_values,
-            zmid=0.0,
-            zmin=-color_bound,
-            zmax=color_bound,
-            colorscale=GRID_CONVERGENCE_NORMALIZATION.get("heatmap_colorscale", "RdBu_r"),
-            colorbar={"title": "ΔCL [%]"},
-            texttemplate="%{z:.2f}" if GRID_CONVERGENCE_NORMALIZATION.get("heatmap_show_values", True) else None,
-            hovertemplate="Participant: %{y}<br>Grid: %{x}<br>Relative difference: %{z:.4g}%<extra></extra>",
-        ))
-        heatmap_fig.update_layout(
-            font={"family": "Arial, Helvetica, sans-serif", "size": 14},
-            height=max(420, 34 * len(row_labels) + 150),
-            xaxis={"title": {"text": GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level")}, "categoryorder": "array", "categoryarray": grid_order},
-            yaxis={"title": "Participant", "automargin": True, "autorange": "reversed"},
-            margin={"l": 190, "r": 80, "t": 30, "b": 70},
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-        )
-        heatmap_html = f"""
-        <h6>Alternative participant heatmap</h6>
-        <p class="plot-description">Formula: ΔC<sub>L,i</sub> [%] = (C<sub>L,i</sub> − C<sub>L,L1</sub>) / C<sub>L,L1</sub> × 100.</p>
-        {figure_to_html_div(heatmap_fig, filename=f"{filename}_relative_to_l1_heatmap", plot_title=f"{relative_title} | Heatmap")}
-        """
-
     # Shared CFD/icing convergence layout: raw and signed-relative plots in
     # the first row, then the statistics table and box plot in the second.
     linked_legend_attribute = ' data-linked-participant-legend="grid-convergence"'
@@ -792,7 +768,6 @@ def grid_convergence_figure_pair_html(
               {box_plot_html}
             </section>
           </div>
-          {heatmap_html}
         </div>
         """
 
@@ -1155,7 +1130,7 @@ def build_qc_prime_integration_figure(
                         f"Participant ID {participant.participant_id}, {grid_level} {dataset_id}: {reason}."
                     )
                     continue
-                values.append((num_cells ** (-1.0 / 3.0), value, grid_level, dataset_id))
+                values.append((grid_convergence_coordinate(num_cells, cell_counts[1]), value, grid_level, dataset_id))
 
         if not values:
             continue
@@ -1181,13 +1156,13 @@ def build_qc_prime_integration_figure(
                     f"Participant: {escape(label)}<br>"
                     "Grid level=%{customdata[0]}<br>"
                     "Dataset=%{customdata[1]}<br>"
-                    "N^(-1/3)=%{x:.6g}<br>"
+                    "log(h/h_L1)=%{x:.6g}<br>"
                     "Q_c'=%{y:.6g} W/m<extra></extra>"
                 ),
             ))
             trace_count += 1
 
-    style_xy_figure(fig, case_id, "qc_prime", "N<sup>-1/3</sup> [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
+    style_xy_figure(fig, case_id, "qc_prime", "log(h/h<sub>L1</sub>) [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
     style_grid_level_x_axis(fig, case_id)
     fig.update_yaxes(autorange="reversed")
     apply_individual_plot_overrides(fig, case_id, "qc_prime")
@@ -1707,7 +1682,7 @@ def build_upper_horn_angle_convergence_section(participants, case_id: str) -> st
             slice_label = f"Y = {decoded_slice:g} m" if decoded_slice is not None else slice_key
             name = participant_id + (f" | {roughness_label}" if roughness_label else "") + f" | {slice_label}"
             fig.add_trace(go.Scatter(
-                x=[cell_counts[int(level[1:])] ** (-1.0 / 3.0) for level in levels],
+                x=[grid_convergence_coordinate(cell_counts[int(level[1:])], cell_counts[1]) for level in levels],
                 y=[angles[(participant_id, bin_set, roughness_key, slice_key, level)][1] for level in levels],
                 mode="lines+markers", name=name, legendgroup=name,
                 legendrank=participant_legend_rank(participant_id), line={"color": participant_color(participant_id)},
@@ -1718,7 +1693,7 @@ def build_upper_horn_angle_convergence_section(participants, case_id: str) -> st
             if key not in reference_angles:
                 continue
             fig.add_trace(go.Scatter(
-                x=[cell_counts[index] ** (-1.0 / 3.0) for index in (1, 2, 3, 4)],
+                x=[grid_convergence_coordinate(cell_counts[index], cell_counts[1]) for index in (1, 2, 3, 4)],
                 y=[reference_angles[key]] * 4, mode="lines", name=f"Exp. {label}",
                 legendgroup=f"horn_reference_{key}", legendrank=1000,
                 line={"color": "black", "width": 2, "dash": dash},
@@ -1950,7 +1925,10 @@ def _cutdata_roughness_key(zone_name: str) -> str:
 def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: str | None = None) -> str:
     """Plot beta maximum and impingement extent by participant/grid/distribution."""
     if VARIABLE_FILTER is not None and not VARIABLE_FILTER.intersection(
-        {"beta_max", "betamax", "impingement", "impingement_limits", "impingement_width"}
+        {
+            "beta_max", "betamax", "beta_peak_s", "peak_beta_s", "s_peak",
+            "impingement", "impingement_limits", "impingement_width",
+        }
     ):
         return ""
     grid_order = ["L1", "L2", "L3", "L4"]
@@ -1996,6 +1974,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
                 key = (participant.participant_id, bin_set, roughness_key, slice_key, grid_level)
                 zone_metrics = {
                     "beta_max": float(beta_values.max()),
+                    "s_peak": float(s_values.loc[beta_values.idxmax()]),
                     "s_lower": float(impinging_s.min()),
                     "s_upper": float(impinging_s.max()),
                 }
@@ -2004,7 +1983,9 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
                 if previous is None:
                     metrics[key] = zone_metrics
                 else:
-                    previous["beta_max"] = max(previous["beta_max"], zone_metrics["beta_max"])
+                    if zone_metrics["beta_max"] > previous["beta_max"]:
+                        previous["beta_max"] = zone_metrics["beta_max"]
+                        previous["s_peak"] = zone_metrics["s_peak"]
                     previous["s_lower"] = min(previous["s_lower"], zone_metrics["s_lower"])
                     previous["s_upper"] = max(previous["s_upper"], zone_metrics["s_upper"])
                     previous["width"] = previous["s_upper"] - previous["s_lower"]
@@ -2032,10 +2013,10 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
     slice_title = f" | Slice Y={_slice_filter}" if _slice_filter is not None else ""
 
     bin_sets = sorted({key[1] for key in metrics}, key=lambda value: (bin_count_from_bin_set(value) or 10**9, value))
-    metric_distribution_html = {"beta_max": "", "width": ""}
+    metric_distribution_html = {"beta_max": "", "s_peak": "", "width": ""}
     cell_counts = grid_cell_counts_for_case(case_id)
     for bin_set in bin_sets:
-        figures = {"beta_max": go.Figure(), "limits": go.Figure(), "width": go.Figure()}
+        figures = {"beta_max": go.Figure(), "s_peak": go.Figure(), "limits": go.Figure(), "width": go.Figure()}
         series_keys = sorted({(pid, roughness, slice_key) for pid, bins, roughness, slice_key, _ in metrics if bins == bin_set})
         interval_count = len(series_keys)
         interval_span = 0.56
@@ -2043,7 +2024,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
             levels = [level for level in grid_order if (participant_id, bin_set, roughness_key, slice_key, level) in metrics]
             if not levels:
                 continue
-            x_values = [cell_counts[int(level[1:])] ** (-1.0 / 3.0) for level in levels]
+            x_values = [grid_convergence_coordinate(cell_counts[int(level[1:])], cell_counts[1]) for level in levels]
             roughness_label = format_icing_roughness_title(roughness_key)
             trace_name = participant_id + (f" | {roughness_label}" if roughness_key != "default_roughness" else "")
             trace_name += f" | Y={slice_key}"
@@ -2057,6 +2038,10 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
             figures["beta_max"].add_trace(go.Scatter(
                 **common, y=[metrics[(participant_id, bin_set, roughness_key, slice_key, level)]["beta_max"] for level in levels],
                 hovertemplate="Participant: %{fullData.name}<br>Grid=%{customdata[0]}<br>Num cells=%{customdata[1]:,.0f}<br>βmax=%{y:.6g}<extra></extra>",
+            ))
+            figures["s_peak"].add_trace(go.Scatter(
+                **common, y=[metrics[(participant_id, bin_set, roughness_key, slice_key, level)]["s_peak"] for level in levels],
+                hovertemplate="Participant: %{fullData.name}<br>Grid=%{customdata[0]}<br>Num cells=%{customdata[1]:,.0f}<br>Peak β s position=%{y:.6g} m<extra></extra>",
             ))
             interval_offset = (
                 0.0 if interval_count <= 1
@@ -2086,6 +2071,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
         label = f"{bin_count}-bin distribution" if bin_count != 1 else "Single-bin distribution"
         plot_definitions = (
             ("beta_max", "beta_max_vs_n", "Peak collection efficiency [-]", "Maximum collection efficiency", "β<sub>max</sub> = max β(s) for β(s) &gt; 0."),
+            ("s_peak", "peak_beta_s_vs_n", "Peak β s position [m]", "Peak β s position", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum."),
             ("width", "impingement_width_vs_n", "Surface impingement width [m]", "Impingement width", "W<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001, using s computed along the already rotated airfoil."),
         )
         for metric_key, style_key, y_label, title_prefix, formula in plot_definitions:
@@ -2118,6 +2104,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
     # the submitted droplet distribution is refined from BINS01 to BINS15.
     distribution_metric_specs = (
         ("beta_max", "beta_max_vs_bins", "Peak collection efficiency [-]", "β<sub>max</sub> = max β(s) for the selected grid and distribution."),
+        ("s_peak", "peak_beta_s_vs_bins", "Peak β s position [m]", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum for the selected grid and distribution."),
         ("width", "impingement_width_vs_bins", "Surface impingement width [m]", "W<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001 for the selected grid and distribution."),
     )
     for metric_key, style_key, y_label, formula in distribution_metric_specs:
@@ -2150,7 +2137,11 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
                 title={"text": "Droplet distribution (15 → 01)"},
             )
             filename = f"{slugify(case_id)}_{metric_key}_distribution_convergence_{grid_level.lower()}{slice_suffix}"
-            title_prefix = "βmax" if metric_key == "beta_max" else "Impingement width"
+            title_prefix = {
+                "beta_max": "βmax",
+                "s_peak": "Peak β s position",
+                "width": "Impingement width",
+            }[metric_key]
             title = f"{title_prefix} droplet-distribution convergence | {grid_level}{slice_title}"
             roughness_note = simplify_icing_participant_legend(fig)
             if case_id == "TC_ONERAM6":
@@ -2167,6 +2158,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
         return ""
     metric_titles = {
         "beta_max": "Maximum Collection Efficiency (βmax)",
+        "s_peak": "Peak β s Position",
         "width": "Impingement Width",
     }
     collapsible_metrics = "".join(
@@ -2176,7 +2168,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
           {metric_distribution_html[metric_key]}
         </details>
         """
-        for metric_key in ("beta_max", "width")
+        for metric_key in ("beta_max", "s_peak", "width")
         if metric_distribution_html[metric_key]
     )
     return f"""
@@ -2272,7 +2264,7 @@ def _build_ae3933_beta_max_comparison(participants) -> str:
             roughness_label = format_icing_roughness_title(roughness_key)
             trace_name = participant_id + (f" | {roughness_label}" if roughness_label else "") + f" | Y={slice_key}"
             common = dict(
-                x=[cell_counts[int(level[1:])] ** (-1.0 / 3.0) for level in levels],
+                x=[grid_convergence_coordinate(cell_counts[int(level[1:])], cell_counts[1]) for level in levels],
                 mode="lines+markers", name=trace_name, legendgroup=trace_name,
                 legendrank=participant_legend_rank(participant_id), line={"color": participant_color(participant_id)},
                 marker=participant_marker(participant_id),
@@ -2368,7 +2360,7 @@ def _build_ae3933_mass_comparison_metric(participants, requirement: str, mass_ki
         for (participant_id, roughness_key), rows in sorted(rows_by_distribution[bin_set].items()):
             rows = sorted(rows, key=lambda row: grid_order.index(row["grid_level"]))
             levels = [row["grid_level"] for row in rows]
-            x_values = [cell_counts[int(level[1:])] ** (-1.0 / 3.0) for level in levels]
+            x_values = [grid_convergence_coordinate(cell_counts[int(level[1:])], cell_counts[1]) for level in levels]
             customdata = [[row["grid_level"], row["ae3932"], row["ae3933"]] for row in rows]
             roughness_label = format_icing_roughness_title(roughness_key)
             trace_name = participant_id + (f" | {roughness_label}" if roughness_key != "unspecified" else "")

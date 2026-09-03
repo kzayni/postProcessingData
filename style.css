@@ -626,6 +626,36 @@ body {
   white-space: nowrap;
 }
 
+.submission-matrices-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.submission-matrix-card h3 {
+  margin-top: 0;
+}
+
+.submission-matrix {
+  width: 100%;
+}
+
+.submission-matrix th:not(:first-child),
+.submission-matrix td.submission-status {
+  text-align: center;
+}
+
+.submission-matrix td.submission-status {
+  font-weight: 700;
+}
+
+@media (max-width: 1050px) {
+  .submission-matrices-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* CL comparison example: raw and L1-relative plots share one row. */
 .convergence-comparison-grid {
   display: grid;
