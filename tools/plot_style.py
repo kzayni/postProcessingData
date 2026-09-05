@@ -13,6 +13,17 @@ from typing import Any
 import plotly.graph_objects as go
 
 
+# Shared experimental envelopes for both NACA0012 cases and every output.
+# RGBA's fourth value controls fill transparency: 0=invisible, 1=opaque.
+NACA0012_EXPERIMENTAL_ENVELOPE_STYLE = {
+    "MAXCCS": {"fill_color": "rgba(198, 219, 239,0.8)", "show_markers": False,
+               "line_color": "rgba(0,0,0,0.5)", "line_width": 2, "line_dash": "solid"},
+    "MINCCS": {"fill_color": "rgba(253, 208, 162,0.8)", "show_markers": False,
+               "line_color": "rgba(0,0,0,0.5)", "line_width": 2, "line_dash": "solid"},
+    "MEANCCS": {"line_dash": "solid", "line_width": 4, "show_markers": False},
+}
+
+
 # =============================================================================
 # SECTION 1 — GLOBAL STYLE (applies to every plot for every case)
 # =============================================================================
@@ -92,6 +103,56 @@ DISTRIBUTION_NORMALIZATION: dict[str, Any] = {
 
 
 # =============================================================================
+# SECTION 1D — DIAMETER-VARIATION CURVES (IQR AND COEFFICIENT OF VARIATION)
+# =============================================================================
+# Each grid level can have an independent line and marker appearance. Plotly
+# dash values include "solid", "dash", "dot", and "dashdot"; marker symbols
+# include "circle", "square", "diamond", and "triangle-up".
+DIAMETER_VARIATION_STYLE: dict[str, dict[str, Any]] = {
+    "L1": {
+        "line": {"color": "black", "width": 3, "dash": "solid"},
+        "marker": {"color": "black", "size": 9, "symbol": "circle", "line": {"color": "black", "width": 1}},
+    },
+    "L2": {
+        "line": {"color": "#4D4D4D", "width": 3, "dash": "dash"},
+        "marker": {"color": "#4D4D4D", "size": 9, "symbol": "square", "line": {"color": "#4D4D4D", "width": 1}},
+    },
+    "L3": {
+        "line": {"color": "#808080", "width": 3, "dash": "dashdot"},
+        "marker": {"color": "#808080", "size": 9, "symbol": "diamond", "line": {"color": "#808080", "width": 1}},
+    },
+    "L4": {
+        "line": {"color": "#B3B3B3", "width": 3, "dash": "dot"},
+        "marker": {"color": "#B3B3B3", "size": 9, "symbol": "triangle-up", "line": {"color": "#B3B3B3", "width": 1}},
+    },
+}
+
+
+# Special NACA0012 HTC and ice-shape presentation plots grouped by roughness
+# treatment. Edit these dictionaries to change either plot family.
+NACA0012_ROUGHNESS_GROUP_STYLE: dict[str, dict[str, Any]] = {
+    "half_mm": {
+        "label": "0.5 / 0.5334 mm",
+        "show_markers": True,
+        "line": {"color": "#b8b8b8", "width": 5, "dash": "solid"},
+        "marker": {"color": "#b8b8b8", "size": 9, "symbol": "circle", "maxdisplayed": 20, "line": {"color": "#000000", "width": 1}},
+    },
+    "one_mm": {
+        "label": "1 mm",
+        "show_markers": True,
+        "line": {"color": "#777777", "width": 5, "dash": "solid"},
+        "marker": {"color": "#777777", "size": 9, "symbol": "square", "maxdisplayed": 20, "line": {"color": "#000000", "width": 1}},
+    },
+    "variable": {
+        "label": "Variable",
+        "show_markers": True,
+        "line": {"color": "#000000", "width": 5, "dash": "solid"},
+        "marker": {"color": "#000000", "size": 9, "symbol": "diamond", "maxdisplayed": 20, "line": {"color": "#000000", "width": 1}},
+    },
+}
+
+
+# =============================================================================
 # SECTION 2 — CASE-SPECIFIC STYLE
 # =============================================================================
 # The AE3932 and AE3933 cases intentionally share the single NACA0012 section.
@@ -150,9 +211,9 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
         # Beta has ONE block shared by BINS01/BINS03/BINS07/BINS15/CARDS.
         "plots": {
             # Grid convergence: aerodynamic coefficients
-            "cl_vs_n": {"height": 520, "yaxis": {"title": {"text": "CL [-]"}, "range": [0.4, 0.5], "dtick": 0.01}},
-            "cd_vs_n": {"height": 520, "yaxis": {"title": {"text": "CD [-]"}, "range": [0.0, 0.03], "dtick": 0.005}},
-            "cmy_vs_n": {"height": 520, "yaxis": {"title": {"text": "Pitching moment coefficient [-]"}, "range": [-0.03, 0.015], "dtick": 0.005}},
+            "cl_vs_n": {"height": 520, "yaxis": {"title": {"text": "CL [-]"}, "range": [0.40, 0.50], "dtick": 0.01}},
+            "cd_vs_n": {"height": 520, "yaxis": {"title": {"text": "CD [-]"}, "range": [0.005, 0.02], "dtick": 0.0025}},
+            "cmy_vs_n": {"height": 520, "yaxis": {"title": {"text": "Pitching moment coefficient [-]"}, "range": [-0.025, 0.01], "dtick": 0.005}},
             # Grid convergence: total icing masses
             "water_mass_vs_n": {"height": 520, "yaxis": {"title": {"text": "Water mass [g]"}}},
             "ice_mass_vs_n": {"height": 520, "yaxis": {"title": {"text": "Ice mass [g]"}}},
@@ -161,40 +222,44 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             "water_mass_by_diameter_vs_n": {"height": 520, "yaxis": {"title": {"text": "Water mass [g]"}}},
             "ice_mass_by_diameter_vs_n": {"height": 520, "yaxis": {"title": {"text": "Ice mass [g]"}}},
             "water_evap_mass_by_diameter_vs_n": {"height": 520, "yaxis": {"title": {"text": "Water evaporation mass [g]"}}},
-            "qc_prime": {"height": 520, "yaxis": {"title": {"text": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]"}}},
+            # Across-participant diameter variation (optional BINS15 data)
+            "water_mass_relative_iqr_vs_droplet_diameter": {"height": 520, "yaxis": {"title": {"text": "Water-mass relative IQR [%]"}}},
+            "water_mass_cv_vs_droplet_diameter": {"height": 520, "yaxis": {"title": {"text": "Water-mass coefficient of variation [%]"}}},
+            "qc_prime": {"height": 520, "yaxis": {"title": {"text": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]"}, "range": [-100.0, 400.0]}},
             # L1-relative copies displayed after each original convergence plot
-            "cl_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Relative difference from L1, ΔCL [%]"}}},
-            "cd_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Relative difference from L1, ΔCD [%]"}}},
-            "cmy_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Relative difference from L1, ΔCM [%]"}}},
-            "water_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Water-mass difference from L1 [%]"}}},
-            "ice_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference from L1 [%]"}}},
-            "water_evap_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Evaporation-mass difference from L1 [%]"}}},
-            "water_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Water-mass difference from L1 [%]"}}},
-            "ice_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference from L1 [%]"}}},
-            "water_evap_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Evaporation-mass difference from L1 [%]"}}},
+            "cl_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCL from L1 [%]"}}},
+            "cd_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCD from L1 [%]"}, "dtick": 25.0}},
+            "cmy_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCM from L1 [%]"}}},
+            "water_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔWater-mass from L1 [%]"}, "range": [-6.0, 6.0]}},
+            "ice_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔIce-mass from L1 [%]"}}},
+            "water_evap_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔEvaporation-mass from L1 [%]"}}},
+            "water_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔWater-mass from L1 [%]"}}},
+            "ice_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔIce-mass from L1 [%]"}}},
+            "water_evap_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔEvaporation-mass from L1 [%]"}}},
             "qc_prime_relative": {"height": 520, "yaxis": {"title": {"text": "Q<sub>c</sub>′ difference from L1 [%]"}}},
             # Fixed-grid droplet-distribution differences from BINS15
             "water_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Water-mass difference from 15 bins [%]"}}},
             "ice_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference from 15 bins [%]"}}},
             "water_evap_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Evaporation-mass difference from 15 [%]"}}},
             # Derived icing water-fate ratios
-            "ice_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "Ice mass / water mass [%]"}}},
-            "ice_evap_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "(Ice + evaporated water mass) / water mass [%]"}}},
+            "ice_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "Ice mass / water mass [%]"},"range": [85.0, 100.0]}},
+            "ice_evap_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "(Ice + evap. mass) / water mass [%]"}}},
             # Water Mass Analysis: collection efficiency and impingement extent
             "beta_max_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
-            "beta_max_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from L1 [%]"}}},
+            "beta_max_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Δβ<sub>max</sub> from L1 [%]"}}},
             "peak_beta_s_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak β s position [m]"}}},
-            "peak_beta_s_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak β s-position difference from L1 [%]"}}},
+            "peak_beta_s_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Δs<sub>βmax</sub> from L1 [%]"}}},
             "impingement_width_vs_n": {"height": 520, "yaxis": {"title": {"text": "Surface impingement width [m]"}}},
-            "impingement_width_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Impingement-width difference from L1 [%]"}}},
+            "impingement_width_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔW<sub>imp</sub> from L1 [%]"}, "range": [-5.0, 5.0]}},
             "beta_max_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
             "peak_beta_s_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Peak β s position [m]"}}},
-            "peak_beta_s_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Peak β s-position difference from 15 bins [%]"}}},
+            "peak_beta_s_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Δs<sub>βmax</sub> from 15 bins [%]"}}},
             "impingement_width_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Surface impingement width [m]"}}},
-            "beta_max_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from 15 bins [%]"}}},
-            "impingement_width_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Surface impingement-width difference from 15 bins [%]"}}},
-            "upper_horn_angle_vs_n": {"height": 520, "yaxis": {"title": {"text": "Upper horn angle [deg]"}}},
-            "upper_horn_angle_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Upper horn angle [deg]"}}},
+            "beta_max_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Δβ<sub>max</sub> from 15 bins [%]"}}},
+            "impingement_width_vs_bins_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "ΔW<sub>imp</sub> from 15 bins [%]"}}},
+            "upper_horn_angle_vs_n": {"height": 520, "yaxis": {"title": {"text": "Upper horn angle [deg]"}, "range": [90.0, 180.0]}},
+            "upper_horn_angle_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Upper horn angle [deg]"}, "range": [90.0, 180.0]}},
+            "upper_horn_angle_by_participant": {"height": 520, "xaxis": {"title": {"text": "Upper horn angle [deg]"}}, "yaxis": {"title": {"text": "Participant ID"}}},
             # AE3933 ice- and water-mass comparisons against matching AE3932 data
             "ae3933_minus_ae3932_ice_mass": {"height": 520, "yaxis": {"title": {"text": "AE3933 − AE3932 ice mass [g]"}}},
             "ae3933_minus_ae3932_ice_mass_percent": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference relative to AE3932 [%]"}}},
@@ -204,12 +269,14 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             "ae3933_minus_ae3932_beta_max_percent": {"height": 520, "yaxis": {"title": {"text": "βmax difference relative to AE3932 [%]"}}},
             # All cut-data plots
             "cp_vs_x": {"height": 560, "xaxis": {"title": {"text": "X [m]"}}, "yaxis": {"title": {"text": "Cp [-]"}, "autorange": "reversed"}},
-            "cp_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from attachment line [m]"}}, "yaxis": {"title": {"text": "Cp [-]"}, "autorange": "reversed"}},
+            "cp_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance [m]"}}, "yaxis": {"title": {"text": "Cp [-]"}, "autorange": "reversed"}},
             "htc_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}, "range": [-0.4, 0.4]}, "yaxis": {"title": {"text": "Convective Heat Transfer [W/m2K]"}, "range": [0, 2000]}},
             "beta": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}, "range": [-0.4, 0.4]}, "yaxis": {"title": {"text": "Collection efficiency [-]"}}},  # Shared by every beta bin/card plot.
             "surface_temperature_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}}, "yaxis": {"title": {"text": "Surface temperature [K]"}}},
             "recovery_temperature_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}}, "yaxis": {"title": {"text": "Recovery temperature [K]"}}},
             "freezing_fraction_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}, "range": [-0.4, 0.4]}, "yaxis": {"title": {"text": "Freezing fraction [-]"}}},
+            "mean_surface_temperature_vs_n": {"height": 520, "yaxis": {"title": {"text": "Mean surface temperature [K]"}, "range": [260.0, 273.15]}},
+            "mean_freezing_fraction_vs_n": {"height": 520, "yaxis": {"title": {"text": "Mean freezing fraction [-]"}}},
             # Ice shapes
             "ice_shape_single": {"height": 650, "xaxis": {"title": {"text": "X [m]"}}, "yaxis": {"title": {"text": "Z [m]"}, "scaleanchor": "x", "scaleratio": 1.0}},
             "ice_shape_final": {"height": 650, "xaxis": {"title": {"text": "X [m]"}}, "yaxis": {"title": {"text": "Z [m]"}, "scaleanchor": "x", "scaleratio": 1.0}},
@@ -262,23 +329,23 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             "water_evap_mass_by_diameter_vs_n": {"height": 520, "yaxis": {"title": {"text": "Water evaporation mass [kg]"}}},
             "qc_prime": {"height": 520, "yaxis": {"title": {"text": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]"}}},
             # L1-relative copies displayed after each original convergence plot
-            "cl_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Relative difference from L1, ΔCL [%]"}}},
-            "cd_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Relative difference from L1, ΔCD [%]"}}},
-            "cmy_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Relative difference from L1, ΔCM [%]"}}},
-            "water_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Water-mass difference from L1 [%]"}}},
-            "ice_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference from L1 [%]"}}},
-            "water_evap_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Evaporation-mass difference from L1 [%]"}}},
-            "water_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Water-mass difference from L1 [%]"}}},
-            "ice_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference from L1 [%]"}}},
-            "water_evap_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Evaporation-mass difference from L1 [%]"}}},
+            "cl_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCL from L1 [%]"}}},
+            "cd_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCD from L1 [%]"}}},
+            "cmy_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCM from L1 [%]"}}},
+            "water_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔWater-mass from L1 [%]"}}},
+            "ice_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔIce-mass from L1 [%]"}}},
+            "water_evap_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔEvaporation-mass from L1 [%]"}}},
+            "water_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔWater-mass from L1 [%]"}}},
+            "ice_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔIce-mass from L1 [%]"}}},
+            "water_evap_mass_by_diameter_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔEvaporation-mass from L1 [%]"}}},
             "qc_prime_relative": {"height": 520, "yaxis": {"title": {"text": "Q<sub>c</sub>′ difference from L1 [%]"}}},
             # Fixed-grid droplet-distribution differences from BINS15
-            "water_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Water-mass difference from 15 bins [%]"}}},
-            "ice_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Ice-mass difference from 15 bins [%]"}}},
-            "water_evap_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "Evaporation-mass difference from 15 [%]"}}},
+            "water_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "ΔWater-mass from 15 bins [%]"}}},
+            "ice_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "ΔIce-mass from 15 bins [%]"}}},
+            "water_evap_mass_vs_n_relative_to_bins15": {"height": 520, "yaxis": {"title": {"text": "ΔEvaporation-mass from 15 bins [%]"}}},
             # Derived icing water-fate ratios (shared across roughness heights)
-            "ice_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "Ice mass / water mass [%]"}}},
-            "ice_evap_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "(Ice + evaporated water mass) / water mass [%]"}}},
+            "ice_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "Ice mass / water mass [%]"}, "range": [88, 100], "autorange": False, "dtick": 2}},
+            "ice_evap_to_water_ratio_vs_n": {"height": 520, "yaxis": {"title": {"text": "(Ice + evap. mass) / water mass [%]"}}},
             # Water Mass Analysis: collection efficiency and impingement extent
             "beta_max_vs_n": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency [-]"}}},
             "beta_max_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Peak collection efficiency difference from L1 [%]"}}},
@@ -296,7 +363,7 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             "upper_horn_angle_vs_bins": {"height": 520, "yaxis": {"title": {"text": "Upper horn angle [deg]"}}},
             # All cut-data plots (one style across all roughness heights)
             "cp_vs_x": {"height": 560, "xaxis": {"title": {"text": "X [m]"}}, "yaxis": {"title": {"text": "Cp [-]"}, "autorange": "reversed"}},
-            "cp_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from attachment line [m]"}}, "yaxis": {"title": {"text": "Cp [-]"}, "autorange": "reversed"}},
+            "cp_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance [m]"}}, "yaxis": {"title": {"text": "Cp [-]"}, "autorange": "reversed"}},
             "htc_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}, "range": [-0.4, 0.4]}, "yaxis": {"title": {"text": "Convective Heat Transfer [W/m2K]"}, "range": [0, 2000]}},
             "beta": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}, "range": [-0.15, 0.15]}, "yaxis": {"title": {"text": "Collection efficiency [-]"}}},  # Shared across every bin and roughness height.
             "surface_temperature_vs_s": {"height": 560, "xaxis": {"title": {"text": "Surface distance from highlight [m]"}}, "yaxis": {"title": {"text": "Surface temperature [K]"}}},

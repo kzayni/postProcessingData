@@ -40,8 +40,10 @@ from .iceshape_builder import (
     valid_submitted_ice_shape_rows,
 )
 from .plot_style import (
+    DIAMETER_VARIATION_STYLE,
     DISTRIBUTION_NORMALIZATION,
     GRID_CONVERGENCE_NORMALIZATION,
+    NACA0012_ROUGHNESS_GROUP_STYLE,
     apply_individual_plot_overrides,
     apply_xy_style,
 )
@@ -55,11 +57,13 @@ GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
     {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
     {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
     {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
+    {"plot_key": "mean_surface_temperature_vs_n", "title": "Mean surface temperature grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Mean surface temperature [K]", "filename_slug": "mean_surface_temperature_vs_n", "cutdata_mean_candidates": ["Ts", "TS", "WallTemperature", "SurfaceTemperature"]},
+    {"plot_key": "mean_freezing_fraction_vs_n", "title": "Mean freezing fraction grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Mean freezing fraction [-]", "filename_slug": "mean_freezing_fraction_vs_n", "cutdata_mean_candidates": ["FF", "FreezingFraction"], "cutdata_valid_range": [0.0, 1.0]},
 ]
 
 WATER_MASS_ANALYSIS_PLOTS: list[dict[str, Any]] = [
     {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
-    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "(Ice + evaporated water mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
+    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "(Ice + evap. mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
 ]
 
 CFD_GRID_CONVERGENCE_PLOTS = [
@@ -366,6 +370,7 @@ def plotly_config(filename: str) -> dict[str, Any]:
 DEFER_PLOTLY_DIR: Path | None = None
 PNG_EXPORT_DIR: Path | None = None
 PNG_EXPORT_QUEUE: list[tuple[go.Figure, Path]] = []
+PNG_EXPORT_RELATIVE = False
 
 
 def set_defer_plotly_html(output_dir: Path | None) -> None:
@@ -373,28 +378,33 @@ def set_defer_plotly_html(output_dir: Path | None) -> None:
     DEFER_PLOTLY_DIR = output_dir
 
 
-def set_png_export_dir(output_dir: Path | None) -> None:
-    global PNG_EXPORT_DIR
+def set_png_export_dir(output_dir: Path | None, *, include_relative: bool = False) -> None:
+    global PNG_EXPORT_DIR, PNG_EXPORT_RELATIVE
     PNG_EXPORT_DIR = output_dir
+    PNG_EXPORT_RELATIVE = include_relative
 
 
 def clear_png_export_queue() -> None:
     PNG_EXPORT_QUEUE.clear()
 
 
-def flush_png_exports(scale: int = 3, width: int = 2000, height: int = 700) -> None:
+def flush_png_exports(scale: int = 3, width: int | None = 2000, height: int | None = 700) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=width, height=height, scale=scale)
+    export_widths = width if width is not None else [figure.layout.width for figure in figures]
+    export_heights = height if height is not None else [figure.layout.height for figure in figures]
+    pio.write_images(list(figures), list(paths), width=export_widths, height=export_heights, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
 def figure_to_html_div(fig: go.Figure, filename: str, plot_title: str) -> str:
     if PNG_EXPORT_DIR is not None:
-        # PNG deliverables contain submitted/absolute values only. Relative
-        # panels and across-participant box plots remain available in HTML.
-        if any(token in filename for token in ("_relative_to_l1", "_relative_to_bins15", "_statistics_boxplot")):
+        # Across-participant box plots remain available in HTML. Relative
+        # panels are exported only when explicitly enabled by the caller.
+        if "_statistics_boxplot" in filename:
+            return ""
+        if ("_relative_to_l1" in filename or "_relative_to_bins15" in filename) and not PNG_EXPORT_RELATIVE:
             return ""
         PNG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
         png_fig = go.Figure(fig)
@@ -1080,6 +1090,110 @@ def build_grid_convergence_figure(participants, case_id: str, plot_spec: dict[st
     return fig, trace_count, skipped_notes
 
 
+def build_cutdata_mean_convergence_figure(
+    participants,
+    case_id: str,
+    plot_spec: dict[str, Any],
+    slice_position: float | None = None,
+) -> tuple[go.Figure, int, list[str]]:
+    """Plot the pointwise mean of a submitted surface variable at every grid level."""
+    fig = go.Figure()
+    trace_count = 0
+    skipped_notes: list[str] = []
+    cell_counts = grid_cell_counts_for_case(case_id)
+    if not cell_counts:
+        return fig, trace_count, skipped_notes
+
+    for participant, case_data in iter_case_data(participants, case_id):
+        # Keep independent datasets and roughness conditions as separate curves.
+        series: dict[tuple[str, str], list[tuple[float, float, str]]] = {}
+        for grid_level, grid_data in sorted(case_data.grid_levels.items()):
+            level_number = grid_level_number_from_value(grid_level)
+            num_cells = cell_counts.get(level_number) if level_number is not None else None
+            if num_cells is None:
+                continue
+            for dataset_id, dataset_data in sorted(grid_data.datasets.items()):
+                cut_data = dataset_data.cut_data
+                if dataset_data.cut_data_file is None or cut_data is None:
+                    continue
+                # Variables can be repeated across droplet-bin zones. Use only
+                # the first valid occurrence for each roughness condition.
+                found_roughness: set[str] = set()
+                for zone in cut_data.zones.values():
+                    if slice_position is not None:
+                        zone_info = parse_ipw3_zone_name(zone.name)
+                        zone_slice = (
+                            decode_slice_position(zone_info["slice"])
+                            if zone_info is not None and zone_info["type"] == "SLICE"
+                            else None
+                        )
+                        if zone_slice is None or not math.isclose(
+                            zone_slice, slice_position, rel_tol=0.0, abs_tol=1.0e-6
+                        ):
+                            continue
+                    roughness_key = _cutdata_roughness_key(zone.name)
+                    if roughness_key in found_roughness:
+                        continue
+                    value_column = find_column_case_insensitive(
+                        zone.data.columns, plot_spec["cutdata_mean_candidates"]
+                    )
+                    if value_column is None:
+                        continue
+                    data = valid_numeric_rows(zone.data, value_column)
+                    if data.empty:
+                        continue
+                    numeric_values = pd.to_numeric(data[value_column], errors="coerce")
+                    valid_range = plot_spec.get("cutdata_valid_range")
+                    if valid_range is not None:
+                        numeric_values = numeric_values[
+                            numeric_values.between(valid_range[0], valid_range[1], inclusive="both")
+                        ]
+                    mean_value = float(numeric_values.mean())
+                    if not np.isfinite(mean_value):
+                        continue
+                    found_roughness.add(roughness_key)
+                    series.setdefault((dataset_id, roughness_key), []).append((
+                        grid_convergence_coordinate(num_cells, cell_counts[1]),
+                        mean_value,
+                        str(grid_level),
+                    ))
+
+        multiple_series = len(series) > 1
+        label = participant_label(participant)
+        for (dataset_id, roughness_key), values in sorted(series.items()):
+            values.sort(key=lambda item: item[0])
+            detail = f"{dataset_id} | {format_roughness_title(roughness_key)}"
+            trace_name = f"{label} | {detail}" if multiple_series else label
+            fig.add_trace(go.Scatter(
+                x=[item[0] for item in values],
+                y=[item[1] for item in values],
+                mode="lines+markers",
+                name=trace_name,
+                legendgroup=trace_name,
+                legendrank=participant_legend_rank(participant.participant_id),
+                line=dict(color=participant_color(participant.participant_id)),
+                marker=participant_marker(participant.participant_id),
+                customdata=[[item[2], dataset_id] for item in values],
+                meta={
+                    "ipw3_participant_id": f"{int(participant.participant_id):03d}",
+                    "ipw3_roughness_key": roughness_key,
+                },
+                hovertemplate=(
+                    f"Participant: {escape(label)}<br>"
+                    "Grid level=%{customdata[0]}<br>"
+                    "Dataset=%{customdata[1]}<br>"
+                    "h = N^(-1/3)=%{x:.6g}<br>"
+                    f"{escape(plot_spec['y_label'])}=%{{y:.6g}}<extra></extra>"
+                ),
+            ))
+            trace_count += 1
+
+    style_xy_figure(fig, case_id, plot_spec["plot_key"], plot_spec["x_label"], plot_spec["y_label"])
+    style_grid_level_x_axis(fig, case_id)
+    apply_individual_plot_overrides(fig, case_id, plot_spec["plot_key"])
+    return fig, trace_count, skipped_notes
+
+
 def build_qc_prime_integration_figure(
     participants,
     case_id: str,
@@ -1095,7 +1209,7 @@ def build_qc_prime_integration_figure(
         return fig, trace_count, skipped_notes
 
     for participant, case_data in iter_case_data(participants, case_id):
-        values: list[tuple[float, float, str, str]] = []
+        values: list[tuple[float, float, str, str, str]] = []
         for grid_level, grid_data in sorted(case_data.grid_levels.items()):
             level_number = grid_level_number_from_value(grid_level)
             num_cells = cell_counts.get(level_number) if level_number is not None else None
@@ -1107,6 +1221,7 @@ def build_qc_prime_integration_figure(
                 if path is None or cut_data is None:
                     continue
                 value = None
+                selected_roughness_key = "default_roughness"
                 reason = "no zone with valid s, Cp, HTC, and Ts values"
                 t_inf = settings.t_inf
                 # HTC and Ts are repeated for each droplet-bin zone. Integrate
@@ -1144,6 +1259,7 @@ def build_qc_prime_integration_figure(
                     window_s, window_q = _window_with_interpolated_edges(s, q, settings.ds_min, settings.ds_max)
                     if len(window_s) >= 2:
                         value = float(np.trapezoid(window_q, window_s))
+                        selected_roughness_key = _cutdata_roughness_key(zone.name)
                         reason = None
                         break
                 if value is None:
@@ -1151,7 +1267,7 @@ def build_qc_prime_integration_figure(
                         f"Participant ID {participant.participant_id}, {grid_level} {dataset_id}: {reason}."
                     )
                     continue
-                values.append((grid_convergence_coordinate(num_cells, cell_counts[1]), value, grid_level, dataset_id))
+                values.append((grid_convergence_coordinate(num_cells, cell_counts[1]), value, grid_level, dataset_id, selected_roughness_key))
 
         if not values:
             continue
@@ -1173,6 +1289,7 @@ def build_qc_prime_integration_figure(
                 line=dict(color=participant_color(participant.participant_id)),
                 marker=participant_marker(participant.participant_id),
                 customdata=[[item[2], item[3]] for item in dataset_values],
+                meta={"ipw3_roughness_key": dataset_values[0][4]},
                 hovertemplate=(
                     f"Participant: {escape(label)}<br>"
                     "Grid level=%{customdata[0]}<br>"
@@ -1185,7 +1302,7 @@ def build_qc_prime_integration_figure(
 
     style_xy_figure(fig, case_id, "qc_prime", "h = N<sup>−1/3</sup> [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
     style_grid_level_x_axis(fig, case_id)
-    fig.update_yaxes(autorange="reversed")
+    fig.update_yaxes(autorange=True)
     apply_individual_plot_overrides(fig, case_id, "qc_prime")
     return fig, trace_count, skipped_notes
 
@@ -1367,6 +1484,33 @@ def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec
           {distribution_html}
         </details>
         """
+
+    if plot_spec.get("cutdata_mean_candidates"):
+        subsections: list[str] = []
+        for slice_position in CASE_SLICES.get(case_id) or [None]:
+            fig, trace_count, skipped_notes = build_cutdata_mean_convergence_figure(
+                participants, case_id, plot_spec, slice_position=slice_position
+            )
+            if trace_count == 0:
+                continue
+            slice_label = f"Y = {slice_position:g} m" if slice_position is not None else "submitted slice"
+            slice_slug = f"_slice_{str(slice_position).replace('.', 'p')}" if slice_position is not None else ""
+            filename = f"{slugify(case_id)}_{plot_spec['filename_slug']}{slice_slug}_all_roughness"
+            title = f"{plot_spec['title']} | {slice_label}"
+            notes_html = ""
+            if skipped_notes:
+                notes_html = '<ul class="plot-notes">' + "".join(
+                    f"<li>{escape(note)}</li>" for note in sorted(set(skipped_notes))
+                ) + "</ul>"
+            subsections.append(f"""
+        <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
+          <h4>{escape(title)}</h4>
+          <p class="plot-description">Arithmetic mean of all valid submitted surface values along the selected cut, evaluated independently for each participant, grid level, dataset, and roughness condition.</p>
+          {notes_html}
+          <div class="plot-container">{grid_convergence_figure_pair_html(fig, case_id, plot_spec['plot_key'], filename, title)}</div>
+        </section>
+            """)
+        return "".join(subsections)
 
     if plot_spec.get("qc_prime_integration_plot", False):
         settings = HEAT_FLUX_CASE_SETTINGS[case_id]
@@ -1622,6 +1766,191 @@ def build_upper_horn_reference_showcase(case_id: str) -> str:
       <div class="horn-reference-grid">{cards}</div>
     </section>
     """
+
+
+def build_upper_horn_angle_participant_summary(
+    participants,
+    case_id: str,
+    *,
+    grid_level: str | None = None,
+    bin_set: str = "BINS15",
+    group_by_roughness: bool = False,
+) -> go.Figure:
+    """Plot submitted horn angles by participant with experimental CCS references."""
+    grid_levels = [grid_level] if grid_level else ["L1", "L2", "L3", "L4"]
+    submitted: dict[tuple[str, str, str], tuple[int, float]] = {}
+    datasets = (
+        (level, record) for level in grid_levels
+        for record in iter_grid_datasets(participants, case_id, level)
+    )
+    for level, (participant, _, _, dataset_data) in datasets:
+        ice_data = getattr(dataset_data, "ice_shape_data", None)
+        if ice_data is None:
+            continue
+        for zone_name, zone in ice_data.zones.items():
+            zone_info = parse_ipw3_ice_shape_zone_name(zone_name)
+            if (
+                zone_info is None
+                or zone_info["bins"] != bin_set
+                or zone_info["shape_role"] not in {"SINGLE_LAYER", "FINAL_LAYER"}
+            ):
+                continue
+            slice_position = decode_slice_position(zone_info["slice"]) if zone_info["slice"] else None
+            if slice_position is not None and not math.isclose(slice_position, 0.9144, abs_tol=1.0e-6):
+                continue
+            x_column, z_column = find_submitted_ice_xz_columns(zone.data.columns)
+            if x_column is None or z_column is None:
+                continue
+            shape = valid_submitted_ice_shape_rows(zone.data, x_column, z_column)
+            geometry = upper_horn_geometry(
+                shape[x_column], shape[z_column], case_id, slice_position,
+            ) if not shape.empty else None
+            if geometry is None:
+                continue
+            participant_id = str(participant.participant_id).split(".", 1)[0].zfill(3)
+            roughness_key = extract_ice_shape_roughness_key(zone_name)
+            key = (participant_id, roughness_key, level)
+            role_rank = 2 if zone_info["shape_role"] == "FINAL_LAYER" else 1
+            if key not in submitted or role_rank > submitted[key][0]:
+                submitted[key] = (role_rank, float(geometry[2]))
+
+    fig = go.Figure()
+    participant_ids = sorted({key[0] for key in submitted}, key=lambda value: int(value))
+    if group_by_roughness:
+        roughness_groups = {
+            "half_mm": {"0.5mm", "0.5334mm"},
+            "one_mm": {"1mm"},
+            "variable": {"variable_roughness"},
+        }
+        included_roughness_keys = set().union(*roughness_groups.values())
+        participant_ids = sorted(
+            {pid for (pid, roughness, level) in submitted if roughness in included_roughness_keys},
+            key=lambda value: int(value),
+        )
+        for group_key, roughness_keys in roughness_groups.items():
+            points = sorted(
+                (
+                    (pid, roughness, value[1], level)
+                    for (pid, roughness, level), value in submitted.items()
+                    if roughness in roughness_keys
+                ),
+                key=lambda item: int(item[0]),
+            )
+            if not points:
+                continue
+            group_style = NACA0012_ROUGHNESS_GROUP_STYLE[group_key]
+            marker_style = dict(group_style["marker"])
+            marker_style["size"] = max(float(marker_style.get("size", 9)), 13)
+            marker_style["symbol"] = "circle"
+            marker_style["maxdisplayed"] = 0
+            # Separate each participant's range with a gap so no line joins
+            # different participant rows. Retain the endpoint grid in hover.
+            range_points = []
+            for pid in sorted({point[0] for point in points}, key=int):
+                samples = [point for point in points if point[0] == pid]
+                range_points.extend([min(samples, key=lambda p: p[2]), max(samples, key=lambda p: p[2]), None])
+            fig.add_trace(go.Scatter(
+                x=[point[2] if point else None for point in range_points],
+                y=[int(point[0]) if point else None for point in range_points],
+                mode="lines+markers",
+                connectgaps=False,
+                line=group_style["line"],
+                name=str(group_style["label"]),
+                legendgroup=f"horn_roughness_{group_key}",
+                marker=marker_style,
+                customdata=[[point[0], format_icing_roughness_title(point[1]), point[3]] if point else [None, None, None] for point in range_points],
+                hovertemplate=(
+                    "Participant: %{customdata[0]}<br>Roughness: %{customdata[1]}<br>Grid: %{customdata[2]}<br>"
+                    "Upper horn angle=%{x:.4g}°<extra></extra>"
+                ),
+            ))
+    else:
+        for participant_id in participant_ids:
+            participant_points = sorted(
+                (roughness, value[1], level)
+                for (pid, roughness, level), value in submitted.items()
+                if pid == participant_id
+            )
+            participant_points = [min(participant_points, key=lambda p: p[1]), max(participant_points, key=lambda p: p[1])]
+            fig.add_trace(go.Scatter(
+                x=[value for _, value, _ in participant_points],
+                y=[int(participant_id)] * len(participant_points),
+                mode="lines+markers",
+                line={"color": participant_color(participant_id)},
+                name=participant_id,
+                legendgroup=f"participant_{participant_id}",
+                legendrank=participant_legend_rank(participant_id),
+                marker={**participant_marker(participant_id), "color": participant_color(participant_id), "size": 13,
+                        "symbol": "circle", "maxdisplayed": 0},
+                customdata=[[format_icing_roughness_title(roughness), level] for roughness, _, level in participant_points],
+                hovertemplate=(
+                    f"Participant: {participant_id}<br>Roughness: %{{customdata[0]}}<br>Grid: %{{customdata[1]}}<br>"
+                    "Upper horn angle=%{x:.4g}°<extra></extra>"
+                ),
+            ))
+
+    reference_path = EXPERIMENTAL_ICE_SHAPE_FILES.get(case_id)
+    reference_angles: dict[str, float] = {}
+    if reference_path is not None and reference_path.exists():
+        experimental = load_experimental_ice_shape_data(str(reference_path))
+        for zone_name, zone in experimental.zones.items():
+            reference_key = zone_name.replace("_", "").upper()
+            if reference_key not in {"MINCCS", "MEANCCS", "MAXCCS"}:
+                continue
+            x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
+            z_column = find_column_case_insensitive(zone.data.columns, ["Y", "Z", "CoordinateZ"])
+            if x_column is None or z_column is None:
+                continue
+            geometry = upper_horn_geometry(
+                pd.to_numeric(zone.data[x_column], errors="coerce") * INCHES_TO_METRES,
+                pd.to_numeric(zone.data[z_column], errors="coerce") * INCHES_TO_METRES,
+            )
+            if geometry is not None:
+                reference_angles[reference_key] = float(geometry[2])
+
+    if participant_ids:
+        y_min, y_max = int(participant_ids[0]) - 0.5, int(participant_ids[-1]) + 0.5
+        reference_styles = {
+            "MINCCS": ("Exp. MinCCS", "dot"),
+            "MEANCCS": ("Exp. MeanCCS", "solid"),
+            "MAXCCS": ("Exp. MaxCCS", "dash"),
+        }
+        for key, (label, dash) in reference_styles.items():
+            if key not in reference_angles:
+                continue
+            fig.add_trace(go.Scatter(
+                x=[reference_angles[key], reference_angles[key]],
+                y=[y_min, y_max],
+                mode="lines",
+                name=label,
+                legendgroup=f"horn_reference_{key}",
+                legendrank=1000,
+                line={"color": "black", "width": 2, "dash": dash},
+                hovertemplate=f"{label}<br>Upper horn angle=%{{x:.4g}}°<extra></extra>",
+            ))
+
+    style_xy_figure(
+        fig, case_id, "upper_horn_angle_by_participant",
+        "Upper horn angle [deg]", "Participant ID", height=520,
+    )
+    if participant_ids:
+        fig.update_yaxes(
+            tickmode="array",
+            tickvals=[int(value) for value in participant_ids],
+            ticktext=participant_ids,
+            range=[int(participant_ids[-1]) + 0.5, int(participant_ids[0]) - 0.5],
+            autorange=False,
+        )
+    grouped_suffix = "_grouped_roughness" if group_by_roughness else ""
+    fig.update_xaxes(title_text="Upper horn angle [deg]<br><span style='font-size:20px'>Minimum–maximum across available grid levels</span>")
+    grid_slug = grid_level.lower() if grid_level else "all_grid_levels"
+    filename = f"{slugify(case_id)}_upper_horn_angle_by_participant_{bin_set.lower()}_{grid_slug}{grouped_suffix}"
+    figure_to_html_div(
+        fig, filename,
+        f"Upper horn angle by participant | {display_bin_set(bin_set)} | {', '.join(grid_levels)}"
+        + (" | Roughness groups" if group_by_roughness else ""),
+    )
+    return fig
 
 
 def build_upper_horn_angle_convergence_section(participants, case_id: str) -> str:
@@ -2709,6 +3038,117 @@ def build_per_bin_analysis_section(
       {metric_sections}
     </section>
     """
+
+
+def build_water_mass_diameter_dispersion_figures(
+    participants,
+    case_id: str,
+    *,
+    bin_set: str = "BINS15",
+    requirement: str = "optional",
+) -> tuple[go.Figure, go.Figure]:
+    """Plot across-participant relative IQR and CV against droplet diameter.
+
+    A separate curve is drawn for each grid level. Diameter-resolved masses in
+    the NACA0012 submissions are stored in kilograms, so they are converted to
+    grams before the statistics are evaluated.
+    """
+    values: dict[tuple[int, float], dict[str, list[float]]] = {}
+
+    for participant, case_data in iter_case_data(participants, case_id):
+        if case_data.grid_convergence_data is None:
+            continue
+        participant_id = str(participant.participant_id)
+        for zone_name, zone in case_data.grid_convergence_data.zones.items():
+            if "by_diameter" not in zone_name.lower():
+                continue
+            if not grid_convergence_zone_matches_requirement(zone, requirement):
+                continue
+
+            columns = zone.data.columns
+            diameter_column = find_column_case_insensitive(columns, ["DIAMETER", "Diameter"])
+            bin_set_column = find_column_case_insensitive(columns, ["BIN_SET", "BinSet"])
+            grid_column = find_column_case_insensitive(columns, ["GRID_LEVEL", "GridLevel"])
+            water_column = find_column_case_insensitive(columns, ["WATER_MASS", "WaterMass"])
+            if None in (diameter_column, bin_set_column, grid_column, water_column):
+                continue
+
+            for _, row in zone.data.iterrows():
+                if str(row[bin_set_column]).upper() != bin_set.upper():
+                    continue
+                level = grid_level_number_from_value(row[grid_column])
+                try:
+                    diameter = float(row[diameter_column])
+                    water_mass_g = float(row[water_column]) * 1000.0
+                except (TypeError, ValueError):
+                    continue
+                if level is None or not np.isfinite(diameter) or not np.isfinite(water_mass_g):
+                    continue
+                if diameter <= -998.0 or water_mass_g <= -998.0:
+                    continue
+                values.setdefault((level, diameter), {}).setdefault(participant_id, []).append(water_mass_g)
+
+    figures = {
+        "relative_iqr": go.Figure(),
+        "coefficient_of_variation": go.Figure(),
+    }
+    for level in sorted({key[0] for key in values}):
+        diameters: list[float] = []
+        relative_iqrs: list[float] = []
+        cvs: list[float] = []
+        sample_sizes: list[int] = []
+        for candidate_level, diameter in sorted(values):
+            if candidate_level != level:
+                continue
+            # Collapse accidental duplicate rows within one participant before
+            # computing the across-participant dispersion.
+            samples = np.asarray([
+                float(np.mean(participant_values))
+                for participant_values in values[(level, diameter)].values()
+            ])
+            if samples.size < 2:
+                continue
+            mean = float(np.mean(samples))
+            q1, median, q3 = np.percentile(samples, [25.0, 50.0, 75.0])
+            diameters.append(diameter)
+            relative_iqrs.append(float((q3 - q1) / abs(median) * 100.0) if median != 0.0 else math.nan)
+            cvs.append(float(np.std(samples, ddof=1) / abs(mean) * 100.0) if mean != 0.0 else math.nan)
+            sample_sizes.append(int(samples.size))
+
+        for metric, y_values in (("relative_iqr", relative_iqrs), ("coefficient_of_variation", cvs)):
+            level_style = DIAMETER_VARIATION_STYLE.get(f"L{level}", {})
+            figures[metric].add_trace(go.Scatter(
+                x=diameters,
+                y=y_values,
+                mode="lines+markers",
+                name=f"L{level}",
+                line=level_style.get("line", {}),
+                marker=level_style.get("marker", {}),
+                customdata=sample_sizes,
+                hovertemplate=(
+                    f"Grid level: L{level}<br>Droplet diameter=%{{x:.4g}} μm<br>"
+                    + ("Relative IQR=%{y:.4g}%" if metric == "relative_iqr" else "Coefficient of variation=%{y:.4g}%")
+                    + "<br>Participants=%{customdata}<extra></extra>"
+                ),
+            ))
+
+    style_xy_figure(figures["relative_iqr"], case_id, "water_mass_relative_iqr_vs_droplet_diameter", "Droplet diameter [μm]", "Water-mass relative IQR [%]", height=520)
+    style_xy_figure(figures["coefficient_of_variation"], case_id, "water_mass_cv_vs_droplet_diameter", "Droplet diameter [μm]", "Water-mass coefficient of variation [%]", height=520)
+    figures["relative_iqr"].update_xaxes(rangemode="tozero")
+    figures["coefficient_of_variation"].update_xaxes(rangemode="tozero")
+
+    filename_base = f"{slugify(case_id)}_water_mass"
+    figure_to_html_div(
+        figures["relative_iqr"],
+        f"{filename_base}_relative_iqr_vs_droplet_diameter_{bin_set.lower()}_all_grid_levels",
+        f"Water-mass relative IQR vs droplet diameter | {display_bin_set(bin_set)}",
+    )
+    figure_to_html_div(
+        figures["coefficient_of_variation"],
+        f"{filename_base}_coefficient_of_variation_vs_droplet_diameter_{bin_set.lower()}_all_grid_levels",
+        f"Water-mass coefficient of variation vs droplet diameter | {display_bin_set(bin_set)}",
+    )
+    return figures["relative_iqr"], figures["coefficient_of_variation"]
 
 def collect_cfd_roughness_keys(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> list[str]:
     roughness_keys: set[str] = set()

@@ -22,7 +22,7 @@ from .gatherParticipantData import (
     read_tecplot_dat,
 )
 from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
-from .plot_style import apply_xy_style, ice_shape_axis_config
+from .plot_style import apply_xy_style, ice_shape_axis_config, NACA0012_EXPERIMENTAL_ENVELOPE_STYLE
 
 GRID_LEVEL_LINE_DASHES = {"L1": "solid", "L2": "dash", "L3": "dot", "L4": "dashdot"}
 
@@ -320,11 +320,13 @@ def clear_png_export_queue() -> None:
     PNG_EXPORT_QUEUE.clear()
 
 
-def flush_png_exports(scale: int = 3, width: int = 1350, height: int = 900) -> None:
+def flush_png_exports(scale: int = 3, width: int | None = 1350, height: int | None = 900) -> None:
     if not PNG_EXPORT_QUEUE:
         return
     figures, paths = zip(*PNG_EXPORT_QUEUE)
-    pio.write_images(list(figures), list(paths), width=width, height=height, scale=scale)
+    export_widths = width if width is not None else [figure.layout.width for figure in figures]
+    export_heights = height if height is not None else [figure.layout.height for figure in figures]
+    pio.write_images(list(figures), list(paths), width=export_widths, height=export_heights, scale=scale)
     PNG_EXPORT_QUEUE.clear()
 
 
@@ -714,61 +716,35 @@ def add_upper_horn_overlay(fig: go.Figure, case_id: str, x_values, z_values, lab
 
 
 def ordered_clean_reference_columns(case_id: str, zone, x_column: str, z_column: str):
-    """Return clean-reference points in a plotting-friendly order.
+    """Order a clean NACA perimeter TE -> upper -> LE -> lower -> TE.
 
-    NACA0012 reference rows can arrive in exported segment order, which makes a
-    line trace jump between the leading and trailing edge. Sort that airfoil
-    into a conventional upper-surface then lower-surface loop for display.
+    The symmetric clean section is star-shaped about its interior centre.
+    Angular ordering within separate chord-relative branches handles exported
+    segment shuffles and the near-vertical trailing-edge cap without mixing
+    upper and lower surfaces in a global X sort.
     """
-    data = zone.data[[x_column, z_column]].dropna()
-    if "NACA0012" not in case_id.upper() or data.empty:
+    data = zone.data[[x_column, z_column]].apply(pd.to_numeric, errors="coerce")
+    data = data[np.isfinite(data).all(axis=1)].drop_duplicates()
+    if "NACA0012" not in case_id.upper() or len(data) < 3:
         return data[x_column], data[z_column]
-
-    segments = []
-    segment_start = 0
-    previous = None
-    for row_number, row in enumerate(data.itertuples(index=False)):
-        point = (float(getattr(row, x_column)), float(getattr(row, z_column)))
-        if previous is not None:
-            distance = ((point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2) ** 0.5
-            if distance > 0.05:
-                segment = data.iloc[segment_start:row_number].drop_duplicates()
-                if len(segment) > 1:
-                    segments.append(segment)
-                segment_start = row_number
-        previous = point
-
-    segment = data.iloc[segment_start:].drop_duplicates()
-    if len(segment) > 1:
-        segments.append(segment)
-
-    if not segments:
-        return data[x_column], data[z_column]
-
-    midline = float(data[z_column].mean())
-    upper_segments = []
-    lower_segments = []
-    for segment in segments:
-        if float(segment[z_column].mean()) >= midline:
-            oriented = segment.sort_values(x_column, ascending=True)
-            upper_segments.append(oriented)
-        else:
-            oriented = segment.sort_values(x_column, ascending=False)
-            lower_segments.append(oriented)
-
-    upper_segments.sort(key=lambda segment: float(segment[x_column].iloc[0]))
-    lower_segments.sort(key=lambda segment: float(segment[x_column].iloc[0]), reverse=True)
-    ordered = pd.concat(upper_segments + lower_segments, ignore_index=True).drop_duplicates()
-
-    if ordered.empty:
-        return data[x_column], data[z_column]
-
-    first = ordered.iloc[0]
-    last = ordered.iloc[-1]
-    if abs(float(first[x_column]) - float(last[x_column])) > 1.0e-10 or abs(float(first[z_column]) - float(last[z_column])) > 1.0e-10:
-        ordered = pd.concat([ordered, first.to_frame().T], ignore_index=True)
-
-    return ordered[x_column], ordered[z_column]
+    points = data.to_numpy(dtype=float)
+    # Principal chord direction also accommodates a rotated clean section.
+    _, _, axes = np.linalg.svd(points - points.mean(axis=0), full_matrices=False)
+    chord = axes[0]
+    if chord[0] < 0:
+        chord = -chord
+    normal = np.array([-chord[1], chord[0]])
+    along, across = points @ chord, points @ normal
+    centre = chord * ((along.min() + along.max()) / 2) + normal * ((across.min() + across.max()) / 2)
+    relative = points - centre
+    angles = np.arctan2(relative @ normal, relative @ chord)
+    upper = np.flatnonzero(angles >= 0)
+    lower = np.flatnonzero(angles < 0)
+    order = np.concatenate((upper[np.argsort(angles[upper])], lower[np.argsort(angles[lower])]))
+    perimeter = points[order]
+    # Explicit closure is required by both the outline and white mask.
+    perimeter = np.vstack((perimeter, perimeter[0]))
+    return perimeter[:, 0], perimeter[:, 1]
 
 
 def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float | None = None, participants=None) -> tuple[int, list[float]]:
@@ -804,6 +780,8 @@ def add_clean_reference_trace(fig: go.Figure, case_id: str, slice_filter: float 
                 y=z_values,
                 mode="lines",
                 name="Clean reference",
+                fill="toself" if "NACA0012" in case_id.upper() and INCLUDE_EXPERIMENTAL_DATA else None,
+                fillcolor="white",
                 legendgroup="clean_reference",
                 legendrank=1003,
                 line=dict(color="black", width=2),
@@ -849,6 +827,7 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
     trace_count = 0
     experimental_start_index = len(fig.data)
 
+    envelope_fills = []
     for zone_name, zone in experimental_data.zones.items():
         x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
         y_column = find_column_case_insensitive(zone.data.columns, ["Y", "CoordinateY"])
@@ -870,8 +849,25 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
                 {"show_contour": True, "show_markers": True, "line_color": "#d62728", "marker_color": "#d62728", "line_width": 2, "line_dash": "solid", "marker_size": 5, "marker_symbol": "circle", "marker_frequency": 1},
             )
         )
+        style = {**style, **NACA0012_EXPERIMENTAL_ENVELOPE_STYLE.get(normalized_zone_name, {})}
         if not style.get("show_contour", True):
             continue
+
+        if normalized_zone_name in {"MAXCCS", "MINCCS"}:
+            polygon_x = x_values[valid].tolist()
+            polygon_z = z_values[valid].tolist()
+            if (polygon_x[-1], polygon_z[-1]) != (polygon_x[0], polygon_z[0]):
+                polygon_x.append(polygon_x[0])
+                polygon_z.append(polygon_z[0])
+            envelope_fills.append((normalized_zone_name, go.Scatter(
+                x=polygon_x, y=polygon_z, mode="none",
+                line={"width": 0, "color": "rgba(0,0,0,0)"}, fill="toself",
+                fillcolor=style.get("fill_color", "rgba(160,160,160,0.4)" if normalized_zone_name == "MAXCCS" else "white"),
+                name=f"Exp. {'MaxCCS' if normalized_zone_name == 'MAXCCS' else 'MinCCS'}",
+                legendgroup=f"experimental_{normalized_zone_name.lower()}",
+                legendrank=1001 if normalized_zone_name == "MAXCCS" else 1002,
+                showlegend=True, hoverinfo="skip",
+            )))
 
         marker_frequency = max(1, int(style["marker_frequency"]))
         marker_sizes = [
@@ -895,6 +891,7 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
                 y=z_values[valid],
                 mode="lines+markers" if style["show_markers"] else "lines",
                 name=f"Exp. {contour_label}",
+                showlegend=normalized_zone_name not in {"MAXCCS", "MINCCS"},
                 legendgroup=f"experimental_{normalized_zone_name.lower()}",
                 legendrank=legend_rank,
                 opacity=EXPERIMENTAL_ICE_SHAPE_OPACITY,
@@ -931,7 +928,10 @@ def add_experimental_ice_shape_traces(fig: go.Figure, case_id: str) -> int:
     if trace_count:
         experimental_traces = tuple(fig.data[experimental_start_index:])
         submitted_traces = tuple(fig.data[:experimental_start_index])
-        fig.data = experimental_traces + submitted_traces
+        for _, fill_trace in sorted(envelope_fills, key=lambda item: item[0] != "MAXCCS"):
+            fig.add_trace(fill_trace)
+        fills = tuple(fig.data[experimental_start_index + len(experimental_traces):])
+        fig.data = fills + experimental_traces + submitted_traces
 
     return trace_count
 
