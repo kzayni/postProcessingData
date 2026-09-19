@@ -367,14 +367,39 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   document.querySelectorAll('[data-linked-participant-legend="grid-convergence"]').forEach((group) => {
-    const graphs = Array.from(group.querySelectorAll(".plotly-graph-div"));
-    if (graphs.length < 3 || !window.Plotly) return;
+    const frames = Array.from(group.querySelectorAll("iframe.plotly-lazy-frame"));
+    let attempts = 0;
+    const retryWhenPlotsReady = () => {
+      if (attempts++ < 100) setTimeout(initialize, 100);
+    };
+    const initialize = () => {
+    if (group.dataset.linkedLegendReady === "1") return;
+    const graphs = frames.length
+      ? frames.flatMap((frame) => {
+          try { return Array.from(frame.contentDocument?.querySelectorAll(".plotly-graph-div") || []); }
+          catch (_) { return []; }
+        })
+      : Array.from(group.querySelectorAll(".plotly-graph-div"));
+    if (graphs.length < 3 || graphs.some((graph) => !graph.data || typeof graph.on !== "function")) {
+      retryWhenPlotsReady();
+      return;
+    }
     const [rawGraph, relativeGraph] = graphs;
     const boxGraph = graphs.find((graph, index) => index >= 2 &&
       (graph.data || []).some((trace) => trace.type === "box" && trace.customdata));
     const table = group.querySelector(".statistical-table");
     const participantSummary = group.querySelector(".statistical-participants");
-    if (!boxGraph || !table) return;
+    if (!boxGraph || !table) {
+      retryWhenPlotsReady();
+      return;
+    }
+    const relativePlotly = relativeGraph.ownerDocument.defaultView?.Plotly;
+    const boxPlotly = boxGraph.ownerDocument.defaultView?.Plotly;
+    if (!relativePlotly || !boxPlotly) {
+      retryWhenPlotsReady();
+      return;
+    }
+    group.dataset.linkedLegendReady = "1";
 
     const pointRecords = [];
     (boxGraph.data || []).forEach((trace, traceIndex) => {
@@ -405,7 +430,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const id = participantId(trace);
         return id ? (active.has(id) ? true : "legendonly") : trace.visible;
       });
-      await Plotly.restyle(relativeGraph, {visible: relativeVisibility});
+      await relativePlotly.restyle(relativeGraph, {visible: relativeVisibility});
 
       const boxVisibility = (boxGraph.data || []).map((trace) => {
         const id = participantId(trace) || String(trace.customdata?.[0]?.[0] || "");
@@ -415,7 +440,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const values = finite(pointRecords.filter((point) => point.level === level && active.has(point.id)).map((point) => point.value));
         const traceIndex = summaryTraceByLevel.get(level);
         if (traceIndex !== undefined) {
-          await Plotly.restyle(boxGraph, {y: [values]}, [traceIndex]);
+          await boxPlotly.restyle(boxGraph, {y: [values]}, [traceIndex]);
         }
         const row = Array.from(table.tBodies[0]?.rows || []).find((candidate) => candidate.cells[0]?.textContent.trim() === level);
         if (!row) continue;
@@ -428,10 +453,12 @@ document.addEventListener("DOMContentLoaded", () => {
           : null;
         const coefficientOfVariation = standardDeviation !== null && Math.abs(mean) > 1e-15
           ? standardDeviation / Math.abs(mean) * 100 : null;
-        [mean, median, standardDeviation, coefficientOfVariation, q1, q3, q1 === null ? null : q3 - q1]
-          .forEach((value, index) => { row.cells[index + 1].textContent = format(value, index === 3); });
+        const iqr = q1 === null ? null : q3 - q1;
+        const relativeIqr = iqr !== null && Math.abs(median) > 1e-15 ? iqr / Math.abs(median) * 100 : null;
+        [mean, median, standardDeviation, coefficientOfVariation, q1, q3, iqr, relativeIqr]
+          .forEach((value, index) => { row.cells[index + 1].textContent = format(value, index === 3 || index === 7); });
       }
-      await Plotly.restyle(boxGraph, {visible: boxVisibility});
+      await boxPlotly.restyle(boxGraph, {visible: boxVisibility});
       const includedIds = [...new Set(pointRecords.filter((point) => active.has(point.id)).map((point) => point.id))].sort();
       if (participantSummary) {
         participantSummary.textContent = `Number of participants considered = ${includedIds.length} | IDs: ${includedIds.join(", ")}`;
@@ -450,6 +477,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Keep Plotly's native single-click and double-click legend behavior.
     // Synchronize only after Plotly has committed the raw plot visibility.
     rawGraph.on("plotly_restyle", queueDependentUpdate);
+    rawGraph.on("plotly_legendclick", () => setTimeout(queueDependentUpdate, 0));
+    rawGraph.on("plotly_legenddoubleclick", () => setTimeout(queueDependentUpdate, 0));
+    queueDependentUpdate();
+    };
+    frames.forEach((frame) => frame.addEventListener("load", initialize));
+    initialize();
   });
 });
 </script>
@@ -1232,7 +1265,7 @@ def build_page_navigation(case_ids: list[str], current_case_id: str | None = Non
                     per_bin_analysis_page_path(case_id),
                     current_case_id == case_id and current_view == "per_bin_analysis",
                 )
-                if "NACA0012" in case_id:
+                if "NACA0012" in case_id or "ONERAM6" in case_id:
                     metric_links += sidebar_link(
                         "Upper Ice-Horn Angle",
                         upper_horn_angle_page_path(case_id),
@@ -1261,13 +1294,16 @@ def build_page_navigation(case_ids: list[str], current_case_id: str | None = Non
         </details>
         """ if combined else ""
         for grid_level in sorted(VALID_GRID_LEVELS):
-            level_is_open = current_case_id == case_id and current_view in {f"{grid_level}_cutdata", f"{grid_level}_ice_shape"}
+            level_is_open = current_case_id == case_id and current_view in {
+                f"{grid_level}_cutdata", f"{grid_level}_ice_shape", "optional_grid_plots",
+            }
             levels += f"""
             <details class="sidebar-grid-group" {'open' if level_is_open else ''}>
               <summary>{escape(grid_level)}</summary>
               {sidebar_link('Cut-Data', cutdata_page_path(case_id, grid_level), current_case_id == case_id and current_view == f'{grid_level}_cutdata') if html_section_enabled('cutdata') else ''}
               {sidebar_link('Single-layer Ice-Shape', single_ice_shape_page_path(case_id, grid_level)) if html_section_enabled('iceshape') else ''}
               {sidebar_link('Multi-layer Ice-Shape', multi_ice_shape_page_path(case_id, grid_level)) if html_section_enabled('iceshape') else ''}
+              {sidebar_link('Roughness plots', optional_grid_plots_page_path(grid_level), current_case_id == case_id and current_view == 'optional_grid_plots') if case_id == 'TC_ONERAM6' else ''}
             </details>
             """
         case_is_open = current_case_id == case_id and (
@@ -1369,6 +1405,12 @@ def build_case_index_section(case_ids: list[str], participants=None) -> str:
     grid_items = [
         ("Grid-level plots", link_from_root(category_page_path("grid_level_plots")), "L1–L4 CutData and ice-shape plots for each case."),
     ]
+    if "TC_ONERAM6" in case_ids:
+        grid_items.append((
+            "ONERA M6 roughness plots",
+            link_from_root(category_page_path("optional_grid_plots")),
+            "M6 CutData and ice-shape plots for 0.5 mm, 1.5 mm, and variable roughness.",
+        ))
     items = (convergence_items if html_section_enabled("convergence") else []) + (
         grid_items if html_section_enabled("cutdata") or html_section_enabled("iceshape") else []
     )
@@ -1444,11 +1486,13 @@ def build_category_landing_content(category: str, case_ids: list[str], combined:
                     link_from_pages(per_bin_analysis_page_path(case_id)),
                     "Per-bin L1–L4 convergence summaries from the optional 15-bin diameter-resolved submission.",
                 ))
-                if "NACA0012" in case_id:
+                if "NACA0012" in case_id or "ONERAM6" in case_id:
                     items.append((
                         f"{display_case_name(case_id)} — Upper Ice-Horn Angle",
                         link_from_pages(upper_horn_angle_page_path(case_id)),
-                        "Upper-horn angle convergence with MaxCCS, MeanCCS, and MinCCS references.",
+                        "Upper-horn angle convergence with MaxCCS, MeanCCS, and MinCCS references."
+                        if "NACA0012" in case_id else
+                        "Upper-horn angle convergence and construction plots for each spanwise slice.",
                     ))
                 items.append((
                     f"{display_case_name(case_id)} — Water Mass Analysis",
@@ -1503,6 +1547,12 @@ def build_case_landing_content(case_id: str, combined: bool = False) -> str:
         items.append(("Levels Combined — Ice-Shape", link_from_pages(combined_levels_ice_shape_page_path(case_id)), "Participant matrices with L1–L4 ice shapes overlaid."))
 
     for grid_level in sorted(VALID_GRID_LEVELS):
+        if case_id == "TC_ONERAM6":
+            items.append((
+                f"{grid_level} Roughness plots",
+                link_from_pages(optional_grid_plots_page_path(grid_level)),
+                f"CutData and ice-shape plots for the optional {grid_level} roughness submissions.",
+            ))
         if html_section_enabled("cutdata"):
             items.append((f"{grid_level} Cut-Data", link_from_pages(cutdata_page_path(case_id, grid_level)), f"CutData plots for {grid_level}."))
         if html_section_enabled("iceshape"):
@@ -1878,15 +1928,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cleanup", action="store_true", help="Remove generated *_sMap.dat and *_rotated.dat sidecars, then exit without rebuilding.")
     parser.add_argument("--clear", action="store_true", help="Remove the selected output folder before creating the new build.")
     parser.add_argument("--p", "--participant", dest="participant_id", help="Build a preview containing only one participant ID, for example --p 004.")
+    parser.add_argument(
+        "--highlight", action="store_true",
+        help="With --participant and a presentation export, retain other participants in grey under one legend entry.",
+    )
     parser.add_argument("--slides", action="store_true", help="Build index.html as a one-plot-per-slide presentation with sidebar and previous/next controls.")
     parser.add_argument("--png", action="store_true", help="Export every generated plot as a PNG instead of building HTML pages.")
     parser.add_argument(
-        "--naca0012-pres",
+        "--pdf", action="store_true",
+        help="Combine existing PREVIEW_PNG figures into one labelled multipage PDF without regenerating plots.",
+    )
+    parser.add_argument(
+        "--naca0012-pres", "--naca0012",
         action="store_true",
         help="Export the curated NACA0012 presentation figures into FIGURES_NACA0012.",
     )
     parser.add_argument(
-        "--oneram6-pres",
+        "--oneram6-pres", "--oneram6",
         action="store_true",
         help="Export ONERA M6 presentation figures for all three slices into FIGURES_ONERAM6.",
     )
@@ -1949,6 +2007,21 @@ def write_png_plots(
             build_icing_convergence_page_content(participants, case_id)
         for grid_level in sorted(VALID_GRID_LEVELS):
             build_grid_page_content(participants, case_id, grid_level)
+            if case_id == "TC_ONERAM6":
+                # Queue the optional 0.5 mm, 1.5 mm, and variable-roughness
+                # figures as well, so --png and the subsequent --pdf include
+                # the same roughness views exposed by the HTML site.
+                build_optional_grid_plots_page_content(participants, grid_level)
+        if ((case_id.startswith("TC_NACA0012_") or case_id == "TC_ONERAM6")
+                and (variable_filter is None or variable_filter.intersection(
+                    {"horn", "horn_angle", "ice_horn_angle", "upper_horn_angle"}
+                ))):
+            from tools.participant_horn_export import participant_horn_method_figures
+
+            for pid, filename, figure in participant_horn_method_figures(participants, case_id):
+                destination = case_output_dir / "ICE_HORN_PARTICIPANT" / f"p{pid}" / filename
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                convergence_data_builder.PNG_EXPORT_QUEUE.append((figure, destination))
 
     scale = 1 if lower_res else 3
     convergence_data_builder.flush_png_exports(scale=scale)
@@ -1963,6 +2036,7 @@ def write_case_pages(participants, case_ids: list[str], combined: bool = False) 
         "cfd_grid_convergence": "CFD grid convergence",
         "icing_grid_convergence": "Icing grid convergence",
         "grid_level_plots": "Grid-level plots",
+        "optional_grid_plots": "ONERA M6 roughness plots",
     }
     if not html_section_enabled("convergence"):
         for category in (
@@ -1971,6 +2045,9 @@ def write_case_pages(participants, case_ids: list[str], combined: bool = False) 
             category_titles.pop(category)
     if not (html_section_enabled("cutdata") or html_section_enabled("iceshape")):
         category_titles.pop("grid_level_plots")
+        category_titles.pop("optional_grid_plots")
+    if "TC_ONERAM6" not in case_ids:
+        category_titles.pop("optional_grid_plots", None)
     for category, title in category_titles.items():
         category_html = build_page_html(
             title=title,
@@ -2098,7 +2175,7 @@ def write_case_pages(participants, case_ids: list[str], combined: bool = False) 
             )
             per_bin_analysis_page_path(case_id).write_text(per_bin_html, encoding="utf-8")
 
-            if "NACA0012" in case_id:
+            if "NACA0012" in case_id or "ONERAM6" in case_id:
                 horn_analysis_html = build_page_html(
                     title=f"{display_case_name(case_id)} | Upper Ice-Horn Angle",
                     body_html=build_upper_horn_angle_page_content(participants, case_id),
@@ -2151,6 +2228,22 @@ def write_case_pages(participants, case_ids: list[str], combined: bool = False) 
                 shape_path.write_text(shape_html, encoding="utf-8")
 
         for grid_level in sorted(VALID_GRID_LEVELS):
+            if case_id == "TC_ONERAM6":
+                optional_html = build_page_html(
+                    title=f"ONERA M6 | {grid_level} | Roughness plots",
+                    body_html=build_optional_grid_plots_page_content(participants, grid_level),
+                    stylesheet_href="../style.css",
+                    back_href=link_from_pages(category_page_path("optional_grid_plots")),
+                    back_label="ONERA M6 roughness plots",
+                    nav_html=build_page_navigation(
+                        case_ids,
+                        current_case_id=case_id,
+                        current_view="optional_grid_plots",
+                        combined=combined,
+                    ),
+                )
+                optional_grid_plots_page_path(grid_level).write_text(optional_html, encoding="utf-8")
+
             if html_section_enabled("cutdata"):
                 cutdata_html = build_page_html(
                     title=f"{display_case_name(case_id)} | {grid_level} | Cut-Data",
@@ -2197,8 +2290,25 @@ def main() -> None:
     presentation_modes = int(args.naca0012_pres) + int(args.oneram6_pres)
     if presentation_modes > 1:
         raise SystemExit("Choose only one presentation image generator at a time.")
+    if args.highlight and (args.participant_id is None or not presentation_modes):
+        raise SystemExit("--highlight requires --participant with --naca0012-pres or --oneram6-pres.")
     if presentation_modes and any((args.png, args.slides, args.convergence, args.cutdata, args.iceshape)):
         raise SystemExit("Presentation image generation is standalone and cannot be combined with other output modes.")
+    if args.pdf and any((
+        args.png, args.slides, args.naca0012_pres, args.oneram6_pres,
+        args.convergence, args.cutdata, args.iceshape, args.clear, args.clean,
+    )):
+        raise SystemExit("--pdf reads an existing PREVIEW_PNG folder and cannot be combined with build or export options.")
+    if args.pdf:
+        from tools.preview_pdf import export_preview_png_pdf
+
+        png_dir = png_output_dir_for_participant(args.participant_id)
+        try:
+            pdf_path, plot_count = export_preview_png_pdf(png_dir)
+        except FileNotFoundError as error:
+            raise SystemExit(str(error)) from error
+        print(f"Wrote {plot_count}-page PDF from {png_dir}: {pdf_path}")
+        return
     selected_html_sections = {
         section
         for section, selected in (
@@ -2239,9 +2349,18 @@ def main() -> None:
         "TC_ONERAM6": (0.0, None, 0.0),
     }
     
-    participants = load_participants(ROOT_DIR, highlight_points_by_case=highlight_points_by_case, clean_s_cache=args.clean, participant_id=args.participant_id)
+    presentation_participant = args.participant_id if presentation_modes else None
+    participants = load_participants(
+        ROOT_DIR,
+        highlight_points_by_case=highlight_points_by_case,
+        clean_s_cache=args.clean,
+        participant_id=None if presentation_modes else args.participant_id,
+    )
     convergence_data_builder.apply_participant_mass_conventions(participants)
-    if args.participant_id is not None and not participants:
+    if args.participant_id is not None and not any(
+        normalize_participant_id(participant.participant_id) == normalize_participant_id(args.participant_id)
+        for participant in participants
+    ):
         requested_id = normalize_participant_id(args.participant_id)
         raise SystemExit(f"No participant folder found for ID {requested_id}.")
 
@@ -2249,21 +2368,31 @@ def main() -> None:
     preview_name = preview_participant_name(args.participant_id) if args.participant_id is not None else PREVIEW_PARTICIPANT_NAME
 
     if args.naca0012_pres:
-        if args.participant_id is not None:
-            raise SystemExit("--naca0012-pres requires the all-participant dataset; do not combine it with --participant.")
         from tools.NACA0012_PRES_IMAGES import generate
 
-        presentation_dir = ROOT_DIR / "FIGURES_NACA0012"
-        figure_count = generate(participants, presentation_dir)
+        suffix = ""
+        if presentation_participant is not None:
+            info = participant_info(normalize_participant_id(presentation_participant))
+            suffix = "_" + preview_folder_slug((info or {}).get("Organization", "") or presentation_participant)
+        presentation_dir = ROOT_DIR / f"FIGURES_NACA0012{suffix}"
+        figure_count = generate(
+            participants, presentation_dir, participant_id=presentation_participant,
+            highlight=args.highlight,
+        )
         print(f"Wrote {figure_count} NACA0012 presentation figures in {presentation_dir}")
         return
     if args.oneram6_pres:
-        if args.participant_id is not None:
-            raise SystemExit("--oneram6-pres requires the all-participant dataset; do not combine it with --participant.")
         from tools.ONERAM6_PRES_IMAGES import generate
 
-        presentation_dir = ROOT_DIR / "FIGURES_ONERAM6"
-        figure_count = generate(participants, presentation_dir)
+        suffix = ""
+        if presentation_participant is not None:
+            info = participant_info(normalize_participant_id(presentation_participant))
+            suffix = "_" + preview_folder_slug((info or {}).get("Organization", "") or presentation_participant)
+        presentation_dir = ROOT_DIR / f"FIGURES_ONERAM6{suffix}"
+        figure_count = generate(
+            participants, presentation_dir, participant_id=presentation_participant,
+            highlight=args.highlight,
+        )
         print(f"Wrote {figure_count} ONERA M6 presentation figures in {presentation_dir}")
         return
 

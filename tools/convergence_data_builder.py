@@ -49,21 +49,21 @@ from .plot_style import (
 )
 
 GRID_CONVERGENCE_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
-    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
-    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
+    {"plot_key": "cl_vs_n", "title": "CL grid convergence", "x_candidates": ["N"], "y_candidates": ["CL"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "CL [-]", "filename_slug": "cl_vs_n", "group_by_roughness": True},
+    {"plot_key": "cd_vs_n", "title": "CD grid convergence", "x_candidates": ["N"], "y_candidates": ["CD"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "CD [-]", "filename_slug": "cd_vs_n", "group_by_roughness": True},
+    {"plot_key": "cmy_vs_n", "title": "Pitching moment grid convergence", "x_candidates": ["N"], "y_candidates": ["CMY", "CMZ"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Pitching moment coefficient [-]", "filename_slug": "cmy_vs_n", "group_by_roughness": True},
 
-    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
-    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
-    {"plot_key": "mean_surface_temperature_vs_n", "title": "Mean surface temperature grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Mean surface temperature [K]", "filename_slug": "mean_surface_temperature_vs_n", "cutdata_mean_candidates": ["Ts", "TS", "WallTemperature", "SurfaceTemperature"]},
-    {"plot_key": "mean_freezing_fraction_vs_n", "title": "Mean freezing fraction grid convergence", "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Mean freezing fraction [-]", "filename_slug": "mean_freezing_fraction_vs_n", "cutdata_mean_candidates": ["FF", "FreezingFraction"], "cutdata_valid_range": [0.0, 1.0]},
+    {"plot_key": "water_mass_vs_n", "title": "Water mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "ice_mass_vs_n", "title": "Ice mass grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "water_evap_mass_vs_n", "title": "Water evaporation mass grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_vs_n", "combined_icing_plot": True},
+    {"plot_key": "qc_prime", "title": "Integrated convective heat transfer per unit span grid convergence", "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Q<sub>c</sub>′ [W/m]", "filename_slug": "qc_prime_vs_n", "qc_prime_integration_plot": True},
+    {"plot_key": "mean_surface_temperature_vs_n", "title": "Mean surface temperature grid convergence", "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Mean surface temperature [K]", "filename_slug": "mean_surface_temperature_vs_n", "cutdata_mean_candidates": ["Ts", "TS", "WallTemperature", "SurfaceTemperature"]},
+    {"plot_key": "mean_freezing_fraction_vs_n", "title": "Mean freezing fraction grid convergence", "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Mean freezing fraction [-]", "filename_slug": "mean_freezing_fraction_vs_n", "cutdata_mean_candidates": ["FF", "FreezingFraction"], "cutdata_valid_range": [0.0, 1.0]},
 ]
 
 WATER_MASS_ANALYSIS_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
-    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "(Ice + evap. mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
+    {"plot_key": "ice_to_water_ratio_vs_n", "title": "Ice-to-water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Ice mass / water mass [%]", "filename_slug": "ice_to_water_ratio_vs_n", "derived_icing_ratio": "ice_to_water"},
+    {"plot_key": "ice_evap_to_water_ratio_vs_n", "title": "Ice-plus-evaporation to water mass ratio", "x_candidates": ["N"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "(Ice + evap. mass) / water mass [%]", "filename_slug": "ice_evap_to_water_ratio_vs_n", "derived_icing_ratio": "ice_plus_evap_to_water"},
 ]
 
 CFD_GRID_CONVERGENCE_PLOTS = [
@@ -75,13 +75,13 @@ ICING_GRID_CONVERGENCE_PLOTS = [
     if plot_spec.get("combined_icing_plot", False) or plot_spec.get("icing_plot", False)
 ]
 OPTIONAL_ICING_DIAMETER_PLOTS: list[dict[str, Any]] = [
-    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
-    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_mass_by_diameter_vs_n", "title": "Water mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_MASS", "WaterMass"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Water mass [g]", "filename_slug": "water_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "ice_mass_by_diameter_vs_n", "title": "Ice mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["ICE_MASS", "IceMass"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Ice mass [g]", "filename_slug": "ice_mass_by_diameter_vs_n", "diameter_plot": True},
+    {"plot_key": "water_evap_mass_by_diameter_vs_n", "title": "Water evaporation mass by droplet diameter grid convergence", "x_candidates": ["N"], "y_candidates": ["WATER_EVAP_MASS", "WaterEvapMass"], "x_label": "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "y_label": "Water evaporation mass [g]", "filename_slug": "water_evap_mass_by_diameter_vs_n", "diameter_plot": True},
 ]
 
 GRID_SPACING_COLUMN = "CHARACTERISTIC_GRID_SPACING"
-GRID_SPACING_AXIS_TITLE = "h = N<sup>−1/3</sup> [-]"
+GRID_SPACING_AXIS_TITLE = "h = N<sub>cells</sub><sup>−1/3</sup> [-]"
 VARIABLE_FILTER: set[str] | None = None
 INCLUDE_QC = True
 
@@ -242,6 +242,8 @@ def format_icing_roughness_title(roughness_key: str) -> str | None:
     """Return a visible icing roughness label, omitting absent metadata."""
     if not roughness_key or roughness_key == "unspecified":
         return None
+    if roughness_key == "mixed_roughness":
+        return "0.5 mm / variable roughness"
     return format_roughness_title(roughness_key)
 
 
@@ -280,6 +282,123 @@ def valid_numeric_rows(dataframe, *columns: str, positive_columns: set[str] | No
         valid_mask &= column_mask
 
     return dataframe.loc[valid_mask]
+
+
+def iced_surface_ds_weighted_mean(
+    dataframe: pd.DataFrame,
+    value_column: str,
+    ice_shape: pd.DataFrame,
+    valid_range: list[float] | tuple[float, float] | None = None,
+) -> float | None:
+    """Return ``integral(value ds) / integral(ds)`` over geometrically iced segments."""
+    coordinate_columns: list[str] = []
+    ice_coordinate_columns: list[str] = []
+    for axis in ("X", "Y", "Z"):
+        clean_column = find_column_case_insensitive(dataframe.columns, [axis])
+        ice_column = find_column_case_insensitive(ice_shape.columns, [f"{axis}_ICED", axis])
+        if clean_column is not None and ice_column is not None:
+            coordinate_columns.append(clean_column)
+            ice_coordinate_columns.append(ice_column)
+    if len(coordinate_columns) < 2 or len(ice_coordinate_columns) < 2 or len(dataframe) < 2:
+        return None
+
+    values = pd.to_numeric(dataframe[value_column], errors="coerce").to_numpy(dtype=float)
+    coordinates = np.column_stack([
+        pd.to_numeric(dataframe[column], errors="coerce").to_numpy(dtype=float)
+        for column in coordinate_columns
+    ])
+    iced_coordinates = np.column_stack([
+        pd.to_numeric(ice_shape[column], errors="coerce").to_numpy(dtype=float)
+        for column in ice_coordinate_columns
+    ])
+    clean_valid = np.all(np.isfinite(coordinates) & (coordinates > -998.0), axis=1)
+    ice_valid = np.all(np.isfinite(iced_coordinates) & (iced_coordinates > -998.0), axis=1)
+    if not np.all(clean_valid) or np.count_nonzero(ice_valid) < 2:
+        return None
+    iced_coordinates = iced_coordinates[ice_valid]
+
+    # Project every submitted iced point onto the participant's clean cut
+    # polyline. The separation is the local geometric ice thickness, while the
+    # projection position identifies the corresponding part of the cut.
+    starts = coordinates[:-1]
+    segments = np.diff(coordinates, axis=0)
+    lengths_squared = np.sum(segments * segments, axis=1)
+    usable = lengths_squared > 0.0
+    starts = starts[usable]
+    segments = segments[usable]
+    lengths_squared = lengths_squared[usable]
+    segment_indices = np.flatnonzero(usable)
+    if not len(starts):
+        return None
+    surface_s = np.concatenate(([0.0], np.cumsum(np.linalg.norm(np.diff(coordinates, axis=0), axis=1))))
+    projected_s: list[float] = []
+    thicknesses: list[float] = []
+    for point in iced_coordinates:
+        fractions = np.clip(np.sum((point - starts) * segments, axis=1) / lengths_squared, 0.0, 1.0)
+        projections = starts + fractions[:, None] * segments
+        distances = np.linalg.norm(projections - point, axis=1)
+        nearest = int(np.argmin(distances))
+        segment_index = int(segment_indices[nearest])
+        projected_s.append(float(
+            surface_s[segment_index]
+            + fractions[nearest] * (surface_s[segment_index + 1] - surface_s[segment_index])
+        ))
+        thicknesses.append(float(distances[nearest]))
+
+    chord_scale = max(float(np.ptp(coordinates[:, 0])), float(np.ptp(coordinates[:, -1])), 1.0e-9)
+    thickness_tolerance = max(1.0e-5 * chord_scale, 1.0e-7)
+    iced_positions = np.asarray(projected_s)[np.asarray(thicknesses) > thickness_tolerance]
+    if iced_positions.size < 2:
+        return None
+    iced_s_min, iced_s_max = float(np.min(iced_positions)), float(np.max(iced_positions))
+
+    valid_points = (
+        np.isfinite(values)
+        & (values > -998.0)
+        & clean_valid
+        & (surface_s >= iced_s_min)
+        & (surface_s <= iced_s_max)
+    )
+    if valid_range is not None:
+        valid_points &= (values >= valid_range[0]) & (values <= valid_range[1])
+
+    ds = np.linalg.norm(np.diff(coordinates, axis=0), axis=1)
+    valid_segments = valid_points[:-1] & valid_points[1:] & np.isfinite(ds) & (ds > 0.0)
+    total_length = float(ds[valid_segments].sum())
+    if not np.isfinite(total_length) or total_length <= 0.0:
+        return None
+
+    segment_values = 0.5 * (values[:-1] + values[1:])
+    mean_value = float(np.sum(segment_values[valid_segments] * ds[valid_segments]) / total_length)
+    return mean_value if np.isfinite(mean_value) else None
+
+
+def matching_ice_shape_zone(dataset_data, cut_zone_name: str):
+    """Find the ice contour matching a cut-data bin, roughness, and slice."""
+    ice_data = getattr(dataset_data, "ice_shape_data", None)
+    cut_info = parse_ipw3_zone_name(cut_zone_name)
+    if ice_data is None or cut_info is None:
+        return None
+    cut_slice = decode_slice_position(cut_info["slice"]) if cut_info["slice"] else None
+    cut_roughness = _cutdata_roughness_key(cut_zone_name)
+    fallback = None
+    for ice_zone_name, ice_zone in ice_data.zones.items():
+        ice_info = parse_ipw3_ice_shape_zone_name(ice_zone_name)
+        if ice_info is None or ice_info["bins"] != cut_info["bins"]:
+            continue
+        ice_slice = decode_slice_position(ice_info["slice"]) if ice_info["slice"] else None
+        if cut_slice is not None and (
+            ice_slice is None
+            or not math.isclose(ice_slice, cut_slice, rel_tol=0.0, abs_tol=1.0e-6)
+        ):
+            continue
+        if extract_ice_shape_roughness_key(ice_zone_name) != cut_roughness:
+            continue
+        if ice_info["shape_role"] == "SINGLE_LAYER":
+            return ice_zone
+        if ice_info["shape_role"] == "FINAL_LAYER":
+            fallback = ice_zone
+    return fallback
 
 
 def case_ordered_y_candidates(case_id: str, candidates: list[str]) -> list[str]:
@@ -711,6 +830,9 @@ def grid_convergence_figure_pair_html(
             line_color="black",
             line_width=1.5,
             line_dash="dash",
+            name="Exp.",
+            showlegend=True,
+            legendgroup="experimental_ice_mass",
         )
     absolute_html = figure_to_html_div(fig, filename=filename, plot_title=plot_title)
     # Experimental horn angles are constant physical reference lines.  Keep
@@ -903,10 +1025,21 @@ def distribution_figure_pair_html(
         if len(bins) == len(trace.x):
             trace.x = bins
     harmonize_comparison_figure(fig, bin_order, "Droplet distribution")
+    participant_fig = go.Figure(fig)
+    if plot_key == "ice_mass_vs_n" and case_id in NACA0012_EXPERIMENTAL_ICE_MASS_G:
+        fig.add_hline(
+            y=NACA0012_EXPERIMENTAL_ICE_MASS_G[case_id],
+            line_color="black",
+            line_width=1.5,
+            line_dash="dash",
+            name="Exp.",
+            showlegend=True,
+            legendgroup="experimental_ice_mass",
+        )
     absolute_html = figure_to_html_div(fig, filename=filename, plot_title=plot_title)
     if not DISTRIBUTION_NORMALIZATION.get("enabled", True):
         return absolute_html
-    relative_fig = go.Figure(fig)
+    relative_fig = go.Figure(participant_fig)
     # Experimental upper-horn references are fixed physical values, not
     # submitted distribution series, so they belong only on the raw plot.
     relative_fig.data = tuple(
@@ -1096,7 +1229,7 @@ def build_cutdata_mean_convergence_figure(
     plot_spec: dict[str, Any],
     slice_position: float | None = None,
 ) -> tuple[go.Figure, int, list[str]]:
-    """Plot the pointwise mean of a submitted surface variable at every grid level."""
+    """Plot the iced-surface, arc-length-weighted mean at every grid level."""
     fig = go.Figure()
     trace_count = 0
     skipped_notes: list[str] = []
@@ -1139,17 +1272,16 @@ def build_cutdata_mean_convergence_figure(
                     )
                     if value_column is None:
                         continue
-                    data = valid_numeric_rows(zone.data, value_column)
-                    if data.empty:
+                    ice_zone = matching_ice_shape_zone(dataset_data, zone.name)
+                    if ice_zone is None:
                         continue
-                    numeric_values = pd.to_numeric(data[value_column], errors="coerce")
-                    valid_range = plot_spec.get("cutdata_valid_range")
-                    if valid_range is not None:
-                        numeric_values = numeric_values[
-                            numeric_values.between(valid_range[0], valid_range[1], inclusive="both")
-                        ]
-                    mean_value = float(numeric_values.mean())
-                    if not np.isfinite(mean_value):
+                    mean_value = iced_surface_ds_weighted_mean(
+                        zone.data,
+                        value_column,
+                        ice_zone.data,
+                        plot_spec.get("cutdata_valid_range"),
+                    )
+                    if mean_value is None:
                         continue
                     found_roughness.add(roughness_key)
                     series.setdefault((dataset_id, roughness_key), []).append((
@@ -1198,6 +1330,7 @@ def build_qc_prime_integration_figure(
     participants,
     case_id: str,
     slice_position: float | None = None,
+    roughness_filter: str | None = None,
 ) -> tuple[go.Figure, int, list[str]]:
     """Integrate submitted HTC/Ts cut data for one slice and plot grid convergence."""
     fig = go.Figure()
@@ -1228,6 +1361,8 @@ def build_qc_prime_integration_figure(
                 # the first usable zone at the requested slice so each dataset
                 # contributes once.
                 for zone in cut_data.zones.values():
+                    if roughness_filter is not None and _cutdata_roughness_key(zone.name) != roughness_filter:
+                        continue
                     if slice_position is not None:
                         zone_info = parse_ipw3_zone_name(zone.name)
                         zone_slice = (
@@ -1289,7 +1424,7 @@ def build_qc_prime_integration_figure(
                 line=dict(color=participant_color(participant.participant_id)),
                 marker=participant_marker(participant.participant_id),
                 customdata=[[item[2], item[3]] for item in dataset_values],
-                meta={"ipw3_roughness_key": dataset_values[0][4]},
+                meta={"ipw3_roughness_key": dataset_values[0][4], "ipw3_participant_id": str(participant.participant_id).zfill(3)},
                 hovertemplate=(
                     f"Participant: {escape(label)}<br>"
                     "Grid level=%{customdata[0]}<br>"
@@ -1300,7 +1435,7 @@ def build_qc_prime_integration_figure(
             ))
             trace_count += 1
 
-    style_xy_figure(fig, case_id, "qc_prime", "h = N<sup>−1/3</sup> [-]", "Q<sub>c</sub>′ = ∫ HTC (T<sub>s</sub> − T<sub>rec</sub>) ds [W/m]")
+    style_xy_figure(fig, case_id, "qc_prime", "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "Q<sub>c</sub>′ [W/m]")
     style_grid_level_x_axis(fig, case_id)
     fig.update_yaxes(autorange=True)
     apply_individual_plot_overrides(fig, case_id, "qc_prime")
@@ -1505,7 +1640,7 @@ def build_grid_convergence_plot_subsection(participants, case_id: str, plot_spec
             subsections.append(f"""
         <section class="plot-subsection" data-variable-key="{escape(plot_spec['plot_key'])}" data-variable-label="{escape(plot_spec['title'])}">
           <h4>{escape(title)}</h4>
-          <p class="plot-description">Arithmetic mean of all valid submitted surface values along the selected cut, evaluated independently for each participant, grid level, dataset, and roughness condition.</p>
+          <p class="plot-description">Arc-length-weighted mean over the iced part of the selected cut, computed as ∫q ds / ∫ds. The iced interval is obtained from the matching participant ice contour wherever its geometric separation from the participant's clean cut surface exceeds the numerical tolerance. The mean is evaluated independently for each participant, grid level, dataset, and roughness condition.</p>
           {notes_html}
           <div class="plot-container">{grid_convergence_figure_pair_html(fig, case_id, plot_spec['plot_key'], filename, title)}</div>
         </section>
@@ -1629,7 +1764,7 @@ def build_onera_upper_horn_reference_showcase(participants, case_id: str) -> str
             x=[leading[0], horn[0]], y=[leading[1], horn[1]], mode="lines+markers",
             name="Upper-horn construction", line={"color": "#dc2626", "width": 3},
             marker={"color": ["#2563eb", "#dc2626"], "size": [8, 10], "symbol": ["circle", "diamond"]},
-            customdata=[["Nearest clean-surface point"], ["Farthest-upstream submitted point"]],
+            customdata=[["Closest clean-surface point"], ["Upper horn: turning point or distance fallback"]],
             hovertemplate="%{customdata[0]}<br>X=%{x:.6g} m<br>Z=%{y:.6g} m<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
@@ -1648,8 +1783,13 @@ def build_onera_upper_horn_reference_showcase(participants, case_id: str) -> str
         fig.update_layout(
             height=340, showlegend=False, margin={"l": 50, "r": 15, "t": 15, "b": 48},
             plot_bgcolor="white", paper_bgcolor="white",
-            xaxis={"title": "X [m]", "range": [x_min - padding, x_max + padding], "showgrid": True, "gridcolor": "#e2e8f0"},
-            yaxis={"title": "Z [m]", "range": [z_min - padding, z_max + padding], "showgrid": True, "gridcolor": "#e2e8f0", "scaleanchor": "x", "scaleratio": 1.0},
+            xaxis={"title": "X [m]", "range": [x_min - padding, x_max + padding],
+                   "showgrid": True, "gridcolor": "#e2e8f0", "showline": True,
+                   "mirror": True, "linecolor": "black", "linewidth": 2},
+            yaxis={"title": "Z [m]", "range": [z_min - padding, z_max + padding],
+                   "showgrid": True, "gridcolor": "#e2e8f0", "scaleanchor": "x",
+                   "scaleratio": 1.0, "showline": True, "mirror": True,
+                   "linecolor": "black", "linewidth": 2},
         )
         slice_slug = str(slice_position).replace(".", "p")
         filename = f"{slugify(case_id)}_010_slice_{slice_slug}_upper_horn_angle_method"
@@ -1664,7 +1804,7 @@ def build_onera_upper_horn_reference_showcase(participants, case_id: str) -> str
     return f"""
     <section class="horn-reference-showcase">
       <h2>ONERA M6 Upper-Horn Angle Construction by Slice</h2>
-      <p>Participant 010's L1, 15-bin, 1 mm roughness result illustrates the same calculation at each submitted M6 slice. The horn is the farthest-upstream submitted point (minimum X), measured from its nearest point on that slice's clean surface; no experimental M6 ice-shape reference is available.</p>
+      <p>Participant 010's L1, 15-bin, 1 mm roughness result illustrates the same calculation at each submitted M6 slice. The horn is a persistent upper-contour turning point with significant outward protrusion in the leading-edge region, falling back to maximum shortest distance from the matching clean contour, measured from its closest point on that clean contour; no experimental M6 ice-shape reference is available.</p>
       <div class="horn-reference-grid">{cards}</div>
     </section>
     """
@@ -1747,8 +1887,13 @@ def build_upper_horn_reference_showcase(case_id: str) -> str:
         fig.update_layout(
             height=340, showlegend=False, margin={"l": 50, "r": 15, "t": 15, "b": 48},
             plot_bgcolor="white", paper_bgcolor="white",
-            xaxis={"title": "X [m]", "range": [x_min - padding, x_max + padding], "showgrid": True, "gridcolor": "#e2e8f0"},
-            yaxis={"title": "Z [m]", "range": [z_min - padding, z_max + padding], "showgrid": True, "gridcolor": "#e2e8f0", "scaleanchor": "x", "scaleratio": 1.0},
+            xaxis={"title": "X [m]", "range": [x_min - padding, x_max + padding],
+                   "showgrid": True, "gridcolor": "#e2e8f0", "showline": True,
+                   "mirror": True, "linecolor": "black", "linewidth": 2},
+            yaxis={"title": "Z [m]", "range": [z_min - padding, z_max + padding],
+                   "showgrid": True, "gridcolor": "#e2e8f0", "scaleanchor": "x",
+                   "scaleratio": 1.0, "showline": True, "mirror": True,
+                   "linecolor": "black", "linewidth": 2},
         )
         filename = f"{slugify(case_id)}_{contour_key.lower()}_upper_horn_angle_method"
         cards += f"""
@@ -1931,7 +2076,7 @@ def build_upper_horn_angle_participant_summary(
 
     style_xy_figure(
         fig, case_id, "upper_horn_angle_by_participant",
-        "Upper horn angle [deg]", "Participant ID", height=520,
+        "α<sub>upper, horn</sub> [deg]", "Participant ID", height=520,
     )
     if participant_ids:
         fig.update_yaxes(
@@ -1942,7 +2087,7 @@ def build_upper_horn_angle_participant_summary(
             autorange=False,
         )
     grouped_suffix = "_grouped_roughness" if group_by_roughness else ""
-    fig.update_xaxes(title_text="Upper horn angle [deg]<br><span style='font-size:20px'>Minimum–maximum across available grid levels</span>")
+    fig.update_xaxes(title_text="α<sub>upper, horn</sub> [deg]<br><span style='font-size:20px'>Minimum–maximum across available grid levels</span>")
     grid_slug = grid_level.lower() if grid_level else "all_grid_levels"
     filename = f"{slugify(case_id)}_upper_horn_angle_by_participant_{bin_set.lower()}_{grid_slug}{grouped_suffix}"
     figure_to_html_div(
@@ -2051,7 +2196,7 @@ def build_upper_horn_angle_convergence_section(participants, case_id: str) -> st
             ))
         if not fig.data:
             continue
-        style_xy_figure(fig, case_id, "upper_horn_angle_vs_n", "Grid level", "Upper horn angle [deg]")
+        style_xy_figure(fig, case_id, "upper_horn_angle_vs_n", "Grid level", "α<sub>upper, horn</sub> [deg]")
         style_grid_level_x_axis(fig, case_id)
         bin_count = bin_count_from_bin_set(bin_set)
         label = f"{bin_count}-bin distribution" if bin_count != 1 else "Single-bin distribution"
@@ -2064,7 +2209,7 @@ def build_upper_horn_angle_convergence_section(participants, case_id: str) -> st
         html += f"""
         <section class="slice-plot-group">
           <h4>{escape(title)}</h4>
-          <p class="plot-description">Formula: θ<sub>upper</sub> = atan2(z<sub>horn</sub> − z<sub>surface</sub>, x<sub>horn</sub> − x<sub>surface</sub>) relative to the positive global x-axis. For ONERA M6, the horn is each participant's farthest-upstream submitted point and the origin is its nearest point on the matching clean slice.</p>
+          <p class="plot-description">Formula: θ<sub>upper</sub> = atan2(z<sub>horn</sub> − z<sub>LE</sub>, x<sub>horn</sub> − x<sub>LE</sub>) relative to the positive global x-axis. For ONERA M6, the horn uses a persistent contour turn with significant outward protrusion, falling back to maximum shortest distance to the clean contour among upper-surface points at Z ≥ 0.02 m, from −10% to 25% of the local chord relative to the clean leading edge. For M6, the angle origin is the closest clean-contour point to the horn tip (replace LE in the formula with that surface point).</p>
           {roughness_note}
           <div class="plot-container">{grid_convergence_figure_pair_html(fig, case_id, "upper_horn_angle_vs_n", filename, title)}</div>
         </section>
@@ -2121,7 +2266,7 @@ def build_upper_horn_angle_convergence_section(participants, case_id: str) -> st
             continue
         style_xy_figure(
             fig, case_id, "upper_horn_angle_vs_bins", "Droplet distribution",
-            "Upper horn angle [deg]",
+            "α<sub>upper, horn</sub> [deg]",
         )
         display_bin_sets = list(reversed(bin_sets))
         fig.update_xaxes(
@@ -2305,6 +2450,14 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
                         # 0p10 and 1p4 / 1p40 into one physical slice.
                         slice_key = f"{slice_position:g}"
                 roughness_key = _cutdata_roughness_key(zone_name)
+                # Connect 019's AE3932 beta results across L1-L4 even though
+                # its submitted L1/L3 zones say KS_VAR and L2/L4 say KS_0p5mm.
+                if (
+                    case_id == "TC_NACA0012_AE3932"
+                    and str(participant.participant_id).zfill(3) == "019"
+                    and roughness_key in {"variable_roughness", "0.5mm"}
+                ):
+                    roughness_key = "mixed_roughness"
                 if case_id == "TC_ONERAM6" and roughness_key != "1mm":
                     continue
                 beta_column = find_column_case_insensitive(zone.data.columns, ["Beta", "BETA", "CollectionEfficiency"])
@@ -2420,9 +2573,9 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
         bin_count = bin_count_from_bin_set(bin_set)
         label = f"{bin_count}-bin distribution" if bin_count != 1 else "Single-bin distribution"
         plot_definitions = (
-            ("beta_max", "beta_max_vs_n", "Peak collection efficiency [-]", "Maximum collection efficiency", "β<sub>max</sub> = max β(s) for β(s) &gt; 0."),
-            ("s_peak", "peak_beta_s_vs_n", "Peak β s position [m]", "Peak β s position", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum."),
-            ("width", "impingement_width_vs_n", "Surface impingement width [m]", "Impingement width", "W<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001, using s computed along the already rotated airfoil."),
+            ("beta_max", "beta_max_vs_n", "β<sub>max</sub> [-]", "Maximum collection efficiency", "β<sub>max</sub> = max β(s) for β(s) &gt; 0."),
+            ("s_peak", "peak_beta_s_vs_n", "s<sub>βmax</sub> [m]", "Peak β s position", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum."),
+            ("width", "impingement_width_vs_n", "Width<sub>imp</sub> [m]", "Impingement width", "Width<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001, using s computed along the already rotated airfoil."),
         )
         for metric_key, style_key, y_label, title_prefix, formula in plot_definitions:
             fig = figures[metric_key]
@@ -2453,9 +2606,9 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
     # At each fixed grid level, show how βmax and impingement width change as
     # the submitted droplet distribution is refined from BINS01 to BINS15.
     distribution_metric_specs = (
-        ("beta_max", "beta_max_vs_bins", "Peak collection efficiency [-]", "β<sub>max</sub> = max β(s) for the selected grid and distribution."),
-        ("s_peak", "peak_beta_s_vs_bins", "Peak β s position [m]", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum for the selected grid and distribution."),
-        ("width", "impingement_width_vs_bins", "Surface impingement width [m]", "W<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001 for the selected grid and distribution."),
+        ("beta_max", "beta_max_vs_bins", "β<sub>max</sub> [-]", "β<sub>max</sub> = max β(s) for the selected grid and distribution."),
+        ("s_peak", "peak_beta_s_vs_bins", "s<sub>βmax</sub> [m]", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum for the selected grid and distribution."),
+        ("width", "impingement_width_vs_bins", "Width<sub>imp</sub> [m]", "Width<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001 for the selected grid and distribution."),
     )
     for metric_key, style_key, y_label, formula in distribution_metric_specs:
         for grid_level in grid_order:
@@ -3427,6 +3580,7 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
                     mode="lines+markers", name=trace_label,
                     legendgroup=f"{label}_{roughness_key}", legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color), marker=participant_marker(participant.participant_id), customdata=customdata,
+                    meta={"ipw3_participant_id": str(participant.participant_id).zfill(3)},
                     hovertemplate=(f"Participant: {escape(label)}<br>Case: {escape(case_id)}<br>Grid level: {escape(target_grid_level)}<br>" + (f"Roughness: {escape(roughness_label)}<br>" if roughness_label else "") +
                                    "Bin set: %{customdata[0]}<br>Number of bins: %{customdata[1]}<br>Zone: %{customdata[2]}<br>"
                                    f"1 / number of bins=%{{x:.6g}}<br>{escape(y_column)}=%{{y}}<extra></extra>"),
@@ -3436,6 +3590,140 @@ def build_combined_icing_figure(participants, case_id: str, plot_spec: dict[str,
 
     style_inverse_bin_figure(fig, case_id, plot_spec["plot_key"], plot_spec["y_label"])
     return fig, trace_count, skipped_notes
+
+
+INVERSE_BIN_GRID_LEVEL_COLORS: dict[str, str] = {
+    "L1": "#1f77b4",  # blue
+    "L2": "#2ca02c",  # green
+    "L3": "#ff7f0e",  # orange
+    "L4": "#d62728",  # red
+}
+
+INVERSE_BIN_PARTICIPANT_SYMBOLS: dict[str, str] = {
+    "001": "circle", "002": "square", "003": "diamond",
+    "004": "triangle-up", "006": "triangle-down", "007": "cross",
+    "008": "x", "009": "star", "010": "pentagon",
+    "013": "hexagon", "014": "triangle-left", "015": "triangle-right",
+    "019": "hourglass", "020": "bowtie",
+}
+
+INVERSE_BIN_EXCLUDED_PARTICIPANTS = {"001", "015"}
+
+
+def build_all_grid_levels_icing_figure(
+    participants,
+    case_id: str,
+    plot_spec: dict[str, Any],
+    requirement: str = "required",
+    roughness_filter: str | None = None,
+) -> tuple[go.Figure, int]:
+    """Overlay inverse-bin curves for L1--L4, colored only by grid level."""
+    combined = go.Figure()
+    trace_count = 0
+    participant_symbols: dict[str, tuple[str, int]] = {}
+
+    # Plotly draws later traces on top. Add L4 first and L1 last so the finest
+    # grid remains visible where curves and markers overlap.
+    level_styles = list(INVERSE_BIN_GRID_LEVEL_COLORS.items())
+    for grid_level, color in reversed(level_styles):
+        level_rank = list(INVERSE_BIN_GRID_LEVEL_COLORS).index(grid_level)
+        level_figure, _, _ = build_combined_icing_figure(
+            participants,
+            case_id,
+            plot_spec,
+            grid_level,
+            requirement=requirement,
+            roughness_filter=roughness_filter,
+        )
+        for trace in level_figure.data:
+            # A lone submitted bin is not a convergence curve; omit isolated
+            # single markers from this multi-level comparison.
+            if trace.x is None or len(trace.x) < 2:
+                continue
+            participant_label_text = str(trace.name or "")
+            trace_meta = trace.meta if isinstance(trace.meta, dict) else {}
+            participant_id = str(trace_meta.get("ipw3_participant_id", "")).zfill(3)
+            if participant_id in INVERSE_BIN_EXCLUDED_PARTICIPANTS:
+                continue
+            marker_symbol = INVERSE_BIN_PARTICIPANT_SYMBOLS.get(participant_id, "circle")
+            participant_rank = int(trace.legendrank or 0)
+            participant_symbols.setdefault(
+                participant_label_text, (marker_symbol, participant_rank),
+            )
+            trace.name = f"{trace.name} | {grid_level}"
+            trace.legendgroup = grid_level
+            trace.legendrank = level_rank * 1000 + participant_rank
+            trace.line.color = color
+            trace.marker.color = color
+            trace.marker.symbol = marker_symbol
+            trace.showlegend = False
+            combined.add_trace(trace)
+            trace_count += 1
+
+    # Match the grouped-roughness presentation: colors and participant symbols
+    # are explained in two compact, independent legend rows above the plot.
+    for level_rank, (grid_level, color) in enumerate(INVERSE_BIN_GRID_LEVEL_COLORS.items()):
+        combined.add_trace(go.Scatter(
+            x=[None], y=[None], mode="lines", name=grid_level,
+            line={"color": color, "width": 5}, legendgroup=f"grid_level_{grid_level}",
+            legendrank=level_rank, showlegend=True, hoverinfo="skip",
+        ))
+    for participant_label_text, (marker_symbol, participant_rank) in sorted(
+        participant_symbols.items(), key=lambda item: item[1][1],
+    ):
+        combined.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers", name=participant_label_text,
+            marker={
+                "color": "#000000", "size": 16, "symbol": marker_symbol,
+                "line": {"color": "#000000", "width": 1.5},
+            },
+            legend="legend2", legendgroup=f"participant_symbol_{participant_label_text}",
+            legendrank=participant_rank, showlegend=True, hoverinfo="skip",
+        ))
+
+    style_inverse_bin_figure(combined, case_id, plot_spec["plot_key"], plot_spec["y_label"])
+    legend_style = {
+        "orientation": "h", "x": 0.0, "xanchor": "left", "yanchor": "bottom",
+        "bgcolor": "rgba(0,0,0,0)", "font": {"size": 24},
+        "traceorder": "normal", "itemsizing": "trace", "title": {"text": ""},
+    }
+    combined.update_layout(
+        legend={**legend_style, "y": 1.20},
+        legend2={**legend_style, "y": 1.08},
+        margin={"l": 90, "r": 70, "t": 180, "b": 95},
+    )
+    return combined, trace_count
+
+
+def queue_all_grid_levels_inverse_bin_figure(
+    participants,
+    case_id: str,
+    plot_key: str = "water_mass_vs_n",
+    requirement: str = "required",
+) -> list[str]:
+    """Queue presentation PNGs that compare every grid level against bin count."""
+    plot_spec = next(spec for spec in GRID_CONVERGENCE_PLOTS if spec["plot_key"] == plot_key)
+    filenames: list[str] = []
+    for roughness_key in collect_combined_icing_roughness_keys(
+        participants, case_id, plot_spec, requirement=requirement,
+    ):
+        figure, trace_count = build_all_grid_levels_icing_figure(
+            participants,
+            case_id,
+            plot_spec,
+            requirement=requirement,
+            roughness_filter=roughness_key,
+        )
+        if trace_count == 0:
+            continue
+        filename = (
+            f"{slugify(case_id)}_{plot_spec['filename_slug']}_"
+            f"{slugify(roughness_key)}_all_grid_levels_vs_inverse_bins.png"
+        )
+        if PNG_EXPORT_DIR is not None:
+            PNG_EXPORT_QUEUE.append((figure, PNG_EXPORT_DIR / filename))
+        filenames.append(filename)
+    return filenames
 
 
 def build_combined_icing_subsection(participants, case_id: str, plot_spec: dict[str, Any], requirement: str = "required") -> str:

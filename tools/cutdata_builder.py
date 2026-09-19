@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from functools import lru_cache
 from html import escape
 from dataclasses import dataclass
 from typing import Any
@@ -12,10 +13,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
-from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets
+from .gatherParticipantData import CASE_SLICES, decode_slice_position, iter_grid_datasets, read_tecplot_dat
 from .heat_flux_computations import CASE_SETTINGS as HEAT_FLUX_CASE_SETTINGS, recovery_temperature
 from .participant_style import participant_color, participant_legend_rank, participant_marker, participant_trace_mode
-from .plot_style import apply_xy_style, beta_inset_x_range, cutdata_x_range, individual_plot_style
+from .plot_style import apply_xy_style, beta_inset_x_range, beta_inset_y_range, cutdata_x_range, individual_plot_style
 
 SAVE_IMAGE_PREVIEWS = False
 IMAGE_PREVIEW_ROOT = Path("IMAGES_PREVIEW")
@@ -34,7 +35,7 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
         "y_columns": ["CP_1", "CP_2"],
         "x_scale": 0.5334,
         "rotation_degrees": 4.0,
-        "label": "Experimental Cp average",
+        "label": "Exp.",
     },
     {
         "case_id": "TC_NACA0012_AE3933",
@@ -45,7 +46,7 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
         "y_columns": ["CP_1", "CP_2"],
         "x_scale": 0.5334,
         "rotation_degrees": 4.0,
-        "label": "Experimental Cp average",
+        "label": "Exp.",
     },
     {
         "case_id": "TC_NACA0012_AE3932",
@@ -56,7 +57,7 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
         "y_columns": ["CP_1", "CP_2"],
         "x_scale": 0.5334,
         "surface_distance_from_highlight": True,
-        "label": "Experimental Cp average",
+        "label": "Exp.",
     },
     {
         "case_id": "TC_NACA0012_AE3933",
@@ -67,7 +68,7 @@ REFERENCE_DATA_SOURCES: list[dict[str, Any]] = [
         "y_columns": ["CP_1", "CP_2"],
         "x_scale": 0.5334,
         "surface_distance_from_highlight": True,
-        "label": "Experimental Cp average",
+        "label": "Exp.",
     },
 ]
 
@@ -140,7 +141,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
         "x_label": "Surface distance from highlight [m]",
-        "y_label": "Collection efficiency [-]",
+        "y_label": "β [-]",
         "filename_slug": "beta_bins01_vs_s",
         "bins_filter": "BINS01",
     },
@@ -151,7 +152,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
         "x_label": "Surface distance from highlight [m]",
-        "y_label": "Collection efficiency [-]",
+        "y_label": "β [-]",
         "filename_slug": "beta_bins03_vs_s",
         "bins_filter": "BINS03",
     },
@@ -162,7 +163,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
         "x_label": "Surface distance from highlight [m]",
-        "y_label": "Collection efficiency [-]",
+        "y_label": "β [-]",
         "filename_slug": "beta_bins07_vs_s",
         "bins_filter": "BINS07",
     },
@@ -173,7 +174,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
         "x_label": "Surface distance from highlight [m]",
-        "y_label": "Collection efficiency [-]",
+        "y_label": "β [-]",
         "filename_slug": "beta_bins15_vs_s",
         "bins_filter": "BINS15",
     },
@@ -184,7 +185,7 @@ CUTDATA_PLOTS: list[dict[str, Any]] = [
         "x_candidates": ["s", "S"],
         "y_candidates": ["Beta", "BETA", "CollectionEfficiency"],
         "x_label": "Surface distance from highlight [m]",
-        "y_label": "Collection efficiency [-]",
+        "y_label": "β [-]",
         "filename_slug": "beta_cards_vs_s",
         "bins_filter": None,
     },
@@ -269,12 +270,17 @@ def extract_roughness_key_from_zone_name(zone_name: str) -> str:
     return "default_roughness"
 
 
-def skip_participant_019_variable_density_beta(participant_id: str, zone_name: str) -> bool:
-    """Keep one 0.5 mm Beta result when 019 repeats it as variable density."""
+def skip_participant_019_variable_density_cutdata(participant_id: str, zone_name: str) -> bool:
+    """Keep participant 019's variable-density distinction ice-shape-only."""
     return (
         str(participant_id).zfill(3) == "019"
         and re.search(r"(?:^|_)VAR_DENSITY(?:_|$)", zone_name, re.IGNORECASE) is not None
     )
+
+
+def skip_participant_019_variable_density_beta(participant_id: str, zone_name: str) -> bool:
+    """Backward-compatible wrapper for Beta-specific callers."""
+    return skip_participant_019_variable_density_cutdata(participant_id, zone_name)
 
 
 def format_roughness_title(roughness_key: str) -> str:
@@ -476,6 +482,7 @@ def style_xy_figure(fig: go.Figure, case_id: str, plot_key: str, x_label: str, y
 def add_collection_efficiency_inset(
     fig: go.Figure,
     x_range: tuple[float, float] | None = None,
+    y_range: tuple[float, float] | None = None,
 ) -> go.Figure:
     """Overlay a leading-edge zoom on a collection-efficiency figure."""
     source_traces = list(fig.data)
@@ -540,7 +547,7 @@ def add_collection_efficiency_inset(
     # A merely numeric inclusion with a few thousandths of padding clips the
     # line/marker against the inset border and makes the peak look missing.
     y_padding = max(0.35 * peak_band, 0.06)
-    zoom_y_range = [zoom_y_min - y_padding, zoom_y_max + y_padding]
+    zoom_y_range = list(y_range) if y_range is not None else [zoom_y_min - y_padding, zoom_y_max + y_padding]
 
     for trace in source_traces:
         inset_trace = go.Scatter(trace.to_plotly_json())
@@ -571,6 +578,11 @@ def add_collection_efficiency_inset(
             anchor="x2",
             range=zoom_y_range,
         ),
+    )
+    fig.add_shape(
+        type="rect", xref="x2 domain", yref="y2 domain",
+        x0=0, x1=1, y0=0, y1=1,
+        fillcolor="white", opacity=1, line=dict(width=0), layer="below",
     )
     fig.add_shape(
         type="rect",
@@ -728,8 +740,16 @@ def add_cp_leading_edge_inset(
         zeroline=False,
     )
     inset_domains = {
+        "upper_left": ([0.05, 0.27], [0.55, 0.95]),
+        # With the NACA0012 Cp-vs-s main range of [-0.2, 0.2], domain
+        # coordinate 0.125 corresponds to s = -0.15 m. This controls only
+        # where the inset is drawn; it does not alter either axis range.
+        "upper_at_minus_0p15": ([0.125, 0.345], [0.55, 0.95]),
         "upper_right": ([0.74, 0.96], [0.55, 0.95]),
+        "lower_right": ([0.74, 0.96], [0.02, 0.42]),
+        "lower_right_raised": ([0.74, 0.96], [0.12, 0.52]),
         "lower_middle": ([0.39, 0.61], [0.05, 0.45]),
+        "lower_middle_raised": ([0.39, 0.61], [0.12, 0.52]),
         "lower_left": ([0.05, 0.27], [0.05, 0.45]),
     }
     x_domain, y_domain = inset_domains.get(position, inset_domains["upper_right"])
@@ -746,6 +766,11 @@ def add_cp_leading_edge_inset(
             anchor="x2",
             range=[zoom_y_high, zoom_y_low],
         ),
+    )
+    fig.add_shape(
+        type="rect", xref="x2 domain", yref="y2 domain",
+        x0=0, x1=1, y0=0, y1=1,
+        fillcolor="white", opacity=1, line=dict(width=0), layer="below",
     )
     fig.add_shape(
         type="rect",
@@ -972,7 +997,7 @@ def add_reference_traces(fig: go.Figure, case_id: str, grid_level: str, plot_key
                 legendrank=10000,
                 marker=dict(
                     color="#ff56be",
-                    size=8,
+                    size=4,
                     symbol="square",
                     line=dict(color="black", width=1.5),
                 ),
@@ -994,6 +1019,27 @@ def slice_matches_filter(slice_position: float | None, slice_filter: float | Non
     if slice_position is None:
         return False
     return abs(slice_position - slice_filter) <= tolerance
+
+
+@lru_cache(maxsize=None)
+def onera_m6_slice_chord_bounds(slice_position: float) -> tuple[float, float]:
+    """Get the local leading- and trailing-edge X from the clean M6 slice."""
+    reference = read_tecplot_dat(Path("R00_REFERENCE/ONERAM6_CLEAN.dat"), process_cutdata=False)
+    for zone_name, zone in reference.zones.items():
+        match = re.search(r"SLICE_Y_([^_]+)", zone_name, re.IGNORECASE)
+        if match is None:
+            continue
+        zone_slice = decode_slice_position(match.group(1))
+        if zone_slice is None or not math.isclose(zone_slice, slice_position, abs_tol=1e-6):
+            continue
+        x_column = find_column_case_insensitive(zone.data.columns, ["X", "CoordinateX"])
+        if x_column is None:
+            break
+        x_values = pd.to_numeric(zone.data[x_column], errors="coerce")
+        x_values = x_values[np.isfinite(x_values) & (x_values > -998.0)]
+        if not x_values.empty and x_values.max() > x_values.min():
+            return float(x_values.min()), float(x_values.max())
+    raise ValueError(f"No clean ONERA M6 chord found for Y={slice_position:g} m")
 
 
 def collect_cutdata_slice_positions(participants, case_id: str, grid_level: str, bins_filter: str | None = None) -> list[float]:
@@ -1050,7 +1096,14 @@ def build_cutdata_figure(
         # the first available solution for each slice and ks condition.
         zone_items = sorted(cut_data.zones.items(), key=cutdata_zone_sort_key)
         for zone_name, zone in zone_items:
-            if is_beta_plot and skip_participant_019_variable_density_beta(participant.participant_id, zone_name):
+            if (
+                plot_spec.get("plot_key") in {
+                    "htc_vs_s", "surface_temperature_vs_s", "freezing_fraction_vs_s",
+                }
+                or is_beta_plot
+            ) and skip_participant_019_variable_density_cutdata(
+                participant.participant_id, zone_name,
+            ):
                 continue
             zone_info = parse_ipw3_zone_name(zone_name)
             bins_id = zone_info["bins"] if zone_info is not None else None
@@ -1089,22 +1142,33 @@ def build_cutdata_figure(
             if data.empty:
                 skipped_note_set.add(f"Participant ID {participant.participant_id} did not provide valid {plot_spec['y_candidates'][0]} values.")
                 continue
+            if plot_spec["plot_key"] == "cp_vs_x":
+                if case_id == "TC_ONERAM6":
+                    if slice_position is None:
+                        skipped_note_set.add(f"Participant ID {participant.participant_id} has no slice position for local-chord Cp.")
+                        continue
+                    leading_x, trailing_x = onera_m6_slice_chord_bounds(slice_position)
+                    data[x_column] = (data[x_column] - leading_x) / (trailing_x - leading_x)
+                elif case_id.startswith("TC_NACA0012_"):
+                    data[x_column] = data[x_column] / 0.5334
             participant_is_019 = str(participant.participant_id).zfill(3) == "019"
-            retains_participant_019_cp_orientation = plot_spec["plot_key"] in {
-                "cp_vs_s",
-                "recovery_temperature_vs_s",
-            }
-            invert_participant_019_s = participant_is_019 and x_column.lower() == "s" and (
-                (
-                    case_id.startswith("TC_NACA0012_")
-                    and grid_level == "L1"
-                    and not retains_participant_019_cp_orientation
-                )
-                or (
-                    case_id == "TC_ONERAM6"
-                    and grid_level in {"L2", "L3", "L4"}
-                    and (plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot)
-                )
+            # NACA0012 L1 reversal is temporarily disabled; retain the condition
+            # here so it can be restored if the submitted s orientation requires it.
+            # retains_participant_019_cp_orientation = plot_spec["plot_key"] in {
+            #     "cp_vs_s",
+            #     "recovery_temperature_vs_s",
+            # }
+            # naca0012_l1_invert_participant_019_s = (
+            #     case_id.startswith("TC_NACA0012_")
+            #     and grid_level == "L1"
+            #     and not retains_participant_019_cp_orientation
+            # )
+            invert_participant_019_s = (
+                participant_is_019
+                and x_column.lower() == "s"
+                and case_id == "TC_ONERAM6"
+                and grid_level in {"L2", "L3", "L4"}
+                and (plot_spec["plot_key"] == "htc_vs_s" or is_beta_plot)
             )
             if invert_participant_019_s:
                 data[x_column] = -pd.to_numeric(data[x_column], errors="coerce")
@@ -1160,6 +1224,7 @@ def build_cutdata_figure(
 
             seen_trace_keys.add(trace_key)
             color = participant_color(participant.participant_id)
+            trace_meta = {"ipw3_participant_id": str(participant.participant_id).zfill(3)}
             fig.add_trace(
                 go.Scatter(
                     x=data[x_column],
@@ -1170,6 +1235,7 @@ def build_cutdata_figure(
                     legendrank=participant_legend_rank(participant.participant_id),
                     line=dict(color=color),
                     marker=participant_marker(participant.participant_id, len(data)),
+                    meta=trace_meta,
                     hovertemplate=(
                         f"Participant: {escape(trace_name)}<br>"
                         f"Roughness: {escape(format_roughness_title(roughness_key))}<br>"
@@ -1178,14 +1244,19 @@ def build_cutdata_figure(
                         f"Distribution: {escape(display_bins_id(bins_id) if bins_id else 'not specified')}<br>"
                         f"Slice: {escape(slice_text)}<br>"
                         f"Zone: {escape(zone_name)}<br>"
-                        f"{escape(x_column)}=%{{x}}<br>"
+                        f"{'X/c' if plot_spec['plot_key'] == 'cp_vs_x' else escape(x_column)}=%{{x}}<br>"
                         f"{escape(y_column)}=%{{y}}<extra></extra>"
                     ),
                 )
             )
             trace_count += 1
 
+    reference_start = len(fig.data)
     trace_count += add_reference_traces(fig, case_id, grid_level, plot_spec["plot_key"])
+    if plot_spec["plot_key"] == "cp_vs_x" and case_id.startswith("TC_NACA0012_"):
+        for trace in fig.data[reference_start:]:
+            trace.x = np.asarray(trace.x, dtype=float) / 0.5334
+            trace.hovertemplate = str(trace.hovertemplate).replace("Rotated X=%{x:.6g} m", "X/c=%{x:.6g}")
     style_xy_figure(
         fig,
         case_id,
@@ -1199,10 +1270,20 @@ def build_cutdata_figure(
     plot_xaxis_style = individual_plot_style(case_id, plot_spec["plot_key"]).get("xaxis", {})
     if configured_x_range is not None and "range" not in plot_xaxis_style:
         fig.update_xaxes(range=configured_x_range)
+    if (
+        case_id == "TC_ONERAM6"
+        and grid_level == "L1"
+        and plot_spec["plot_key"] == "cp_vs_s"
+        and slice_filter is not None
+        and math.isclose(slice_filter, 0.1, abs_tol=1e-6)
+        and roughness_filter == "1mm"
+    ):
+        fig.layout.xaxis.tickangle = -45
     if is_beta_plot and show_cp_inset:
         add_collection_efficiency_inset(
             fig,
             x_range=beta_inset_x_range(case_id),
+            y_range=beta_inset_y_range(case_id),
         )
     if plot_spec["plot_key"] in {"cp_vs_x", "cp_vs_s"}:
         attachment_x = 0.0
@@ -1210,9 +1291,14 @@ def build_cutdata_figure(
             attachment_x = experimental_cp_peak_x(fig) or 0.0
         if case_id != "TC_ONERAM6":
             add_attachment_line(fig, attachment_x)
-        inset_position = "upper_right"
-        if case_id == "TC_ONERAM6":
-            inset_position = "lower_middle" if plot_spec["plot_key"] == "cp_vs_x" else "lower_left"
+        if case_id.startswith("TC_NACA0012_"):
+            inset_position = (
+                "upper_right"
+                if plot_spec["plot_key"] == "cp_vs_x"
+                else "upper_at_minus_0p15"
+            )
+        else:
+            inset_position = "lower_middle_raised" if plot_spec["plot_key"] == "cp_vs_x" else "lower_right_raised"
         if show_cp_inset:
             add_cp_leading_edge_inset(
                 fig,
@@ -1224,6 +1310,10 @@ def build_cutdata_figure(
                     else 1.08 if case_id.startswith("TC_NACA0012_") else None
                 ),
             )
+            # if case_id == "TC_ONERAM6" and fig.layout.yaxis2.range:
+            #     fig.layout.yaxis2.range = [fig.layout.yaxis2.range[0], -0.9]
+            # if case_id == "TC_ONERAM6" and plot_spec["plot_key"] == "cp_vs_x":
+            #     fig.layout.xaxis2.tickangle = -45
     skipped_notes = sorted(skipped_note_set)
     return fig, trace_count, slice_positions, skipped_notes
 
@@ -1248,12 +1338,6 @@ def build_plot_description(plot_spec: dict[str, Any], slice_positions: list[floa
         or plot_spec.get("plot_key", "").startswith("beta_")
     ):
         details.append("For participant 019, the submitted L2-L4 HTC and Beta surface orientation is corrected by plotting against -s; Cp retains the original s orientation.")
-    if (
-        case_id.startswith("TC_NACA0012_")
-        and uses_surface_distance_axis(plot_spec)
-        and plot_spec.get("plot_key") not in {"cp_vs_s", "recovery_temperature_vs_s"}
-    ):
-        details.append("For participant 019 at L1, the submitted surface orientation is corrected by plotting against -s; L2-L4, Cp, and Cp-derived recovery temperature retain the original s orientation.")
     details.append("Legend: Participant ID.")
     return " ".join(details)
 

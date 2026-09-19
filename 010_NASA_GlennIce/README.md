@@ -10,46 +10,47 @@ Please remove any unused sections and adjust this README as needed for your subm
 
 **Name(s):**
 
-Add participant name(s) here.
+Thomas Ozoroski
 
 **Organization / Affiliation:**
 
-Add organization or affiliation here.
+NASA Glenn Research Center / Icing and Acoustics Branch
 
 **Primary Email:**
 
-Add point-of-contact email here.
-
+Thomas.ozoroski@nasa.gov
 
 ## Solver Information
 
 **Solver Name and Version:**
 
-Add solver name and version here.
+GlennICE-v7.0-beta
 
 **Flow Algorithm:**
 
-Describe the flow algorithm here.
+For the NACA0012: FUN3D v14.3 RANS – Stabilized Finite Element
+For the ONERAM6: FUN3D v14.3 RANS – Finite Volume Method
 
 **Turbulence Model:**
 
-Describe the turbulence model here, if applicable.
+For the NACA0012: SA-neg-QCR2000
+For the ONERAM6: SA-neg-rough and SA-neg
 
 **Droplet Trajectory Algorithm:**
 
-Describe the droplet trajectory algorithm here.
+Lagrangian particle tracking with adaptive time stepping
 
 **Thermodynamic Algorithm:**
 
-Describe the thermodynamic algorithm here.
+HTC is computed from two isothermal wall temperatures. HTC is then augmented through two avenues, none when using a rough-wall turbulence model. The secondary method computes a value of roughness, freezing fraction, and HTC is augmented based upon a tanh enhancement method before being iterated until the runback is considered converged.  
 
 **Surface Grid Deformation Algorithm:**
 
-Describe the surface grid deformation algorithm here.
+Prismatoid Extrusion Method 
 
 **Multi-Layer / Multi-Time-Step Methodology:**
 
-Describe the multi-layer or multi-time-step methodology here.
+None
 
 ## Grid Information
 
@@ -118,3 +119,4 @@ Example format:
 ```text
 Author(s), "Title," Journal/Conference/Report, Year. DOI or URL if available.
 ```
+

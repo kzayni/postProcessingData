@@ -49,7 +49,7 @@ VALID_GRID_LEVELS = {"L1", "L2", "L3", "L4"}
 HighlightPoint = tuple[Optional[float], Optional[float], Optional[float]]
 HighlightPointsByCase = dict[str, HighlightPoint]
 DEFAULT_CUTDATA_HIGHLIGHT_POINT: HighlightPoint = (0.0, None, 0.0)
-NACA0012_ROTATION_DEGREES = 4.1
+NACA0012_ROTATION_DEGREES = 4.0
 NACA0012_ROTATION_CENTER_X = 0.13335
 
 
@@ -665,17 +665,18 @@ def curvilinear_mapping_path(cutdata_path: Path) -> Path:
     return cutdata_path.with_name(f"{cutdata_path.stem}_sMap.dat")
 
 
-SMAP_VERSION = "signed-common-frame-z-surface-v11-already-rotated-019"
+SMAP_VERSION = "signed-common-frame-z-surface-v15-already-rotated-019"
 
 
 def uses_rotated_naca_submission_frame(path: Path, case_id: str | None) -> bool:
     """Return whether a NACA cut must be returned from the submitted -4° frame."""
     resolved_case_id = (case_id or extract_case_id_from_name(path.name) or "").upper()
     participant_id = participant_id_from_submission_path(path)
+    if "NACA0012" not in resolved_case_id:
+        return False
     # Participants 001 and 019 supplied NACA0012 coordinates in the common
     # rotated frame already; rotating either submission again would be wrong.
-    already_rotated = participant_id in {"001", "019"}
-    return "NACA0012" in resolved_case_id and not already_rotated
+    return participant_id not in {"001", "019"}
 
 
 def add_naca_reference_s_mapping_coordinates(
@@ -1590,6 +1591,12 @@ def extract_dataset_id_from_name(name: str) -> Optional[str]:
 
 def identify_file_type(name: str) -> Optional[str]:
     """Classify a submitted data file based on its name."""
+    # Participant-specific comparison inputs are loaded explicitly by their
+    # presentation modules. Do not let them replace the canonical ice-shape
+    # submission attached to a dataset.
+    if re.search(r"(?:MULTILAYER|UPDATE_NORMALS|LEVEL_SET|_MCCS_)", name, re.IGNORECASE):
+        return "supplementalIceShape"
+
     if re.search(r"sMap", name, re.IGNORECASE):
         return "sMap"
 
@@ -1658,7 +1665,7 @@ def attach_file_to_participant(participant: Participant, file_path: Path, defaul
         return
 
     file_type = identify_file_type(file_path.name)
-    if file_type in {"sMap", "rotatedIceShape"}:
+    if file_type in {"sMap", "rotatedIceShape", "supplementalIceShape"}:
         return
 
     case_id = extract_case_id_from_name(file_path.name) or default_case_id

@@ -27,6 +27,12 @@ from .plot_style import apply_xy_style, ice_shape_axis_config, NACA0012_EXPERIME
 GRID_LEVEL_LINE_DASHES = {"L1": "solid", "L2": "dash", "L3": "dot", "L4": "dashdot"}
 
 
+def ice_shape_grid_line_dash(case_id: str, participant_id: str, grid_level: str) -> str:
+    if case_id == "TC_ONERAM6" and str(participant_id).zfill(3) == "019" and grid_level == "L3":
+        return "solid"
+    return GRID_LEVEL_LINE_DASHES[grid_level]
+
+
 EXPERIMENTAL_ICE_SHAPE_FILES = {
     "TC_NACA0012_AE3932": Path("E00_Experimental-Data") / "EXP_AE3932.dat",
     "TC_NACA0012_AE3933": Path("E00_Experimental-Data") / "EXP_AE3933.dat",
@@ -639,12 +645,79 @@ def onera_clean_reference_points(slice_position: float) -> tuple[np.ndarray, np.
     return best_match
 
 
+def onera_turning_horn_candidate(x, z, candidates, distances, closest_points, chord):
+    """Return a reliable contour-turn candidate, or None for distance fallback.
+
+    Use chord-scaled arc-length windows so mesh clustering does not amplify
+    noise. Require a persistent turn at two scales and a prominent protrusion.
+    """
+    points = np.column_stack((x, z))
+    steps = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    arc = np.r_[0.0, np.cumsum(steps)]
+    keep = np.r_[True, steps > 1e-12 * chord]
+    if np.count_nonzero(keep) < 7:
+        return None
+    arc_unique, points_unique = arc[keep], points[keep]
+    span = 0.008 * chord
+    distances = np.asarray(distances)
+    threshold = max(0.002 * chord, 0.45 * float(np.max(distances)))
+    scores = []
+
+    def sample(position):
+        # Smooth over a small physical window before estimating tangents.
+        offsets = np.linspace(-0.2 * span, 0.2 * span, 5)
+        return np.array([np.mean(np.interp(position + offsets, arc_unique, points_unique[:, axis]))
+                         for axis in (0, 1)])
+
+    for candidate, index in enumerate(candidates):
+        center = arc[index]
+        if distances[candidate] < threshold or center < 2.3 * span or center > arc[-1] - 2.3 * span:
+            continue
+        neighborhood = (arc >= center - 2.3 * span) & (arc <= center + 2.3 * span)
+        # Do not differentiate across a disconnected contour or a lower-surface
+        # segment. Positive outward Z rejects points beneath the clean upper skin.
+        # Coarse straight flanks can legitimately exceed the tangent window;
+        # reject only jumps spanning the full two-sided broad-scale window.
+        if np.any(steps[np.flatnonzero(neighborhood)[:-1]] > 4 * span):
+            continue
+        if z[index] <= closest_points[candidate][1]:
+            continue
+        turns = []
+        midpoint = sample(center)
+        # The upper horn tip is a crest, not the rising shoulder that can be
+        # farthest from the clean surface. This is independent of point order.
+        before, after = sample(center - span), sample(center + span)
+        if midpoint[1] <= max(before[1], after[1]) + 0.0002 * chord:
+            continue
+        near = np.abs(arc[candidates] - center) <= span
+        if z[index] < np.max(z[candidates[near]]) - 0.0002 * chord:
+            continue
+        for scale in (1.0, 2.0):
+            incoming = midpoint - sample(center - scale * span)
+            outgoing = sample(center + scale * span) - midpoint
+            if min(np.linalg.norm(incoming), np.linalg.norm(outgoing)) < 0.1 * span:
+                break
+            turns.append(math.atan2(incoming[0] * outgoing[1] - incoming[1] * outgoing[0],
+                                    float(np.dot(incoming, outgoing))))
+        if len(turns) != 2 or turns[0] * turns[1] <= 0:
+            continue
+        if not all(math.radians(20) <= abs(turn) <= math.radians(150) for turn in turns):
+            continue
+        # Broad-scale support rejects a sharp but tiny local oscillation.
+        if min(abs(turns[0]), abs(turns[1])) < 0.5 * max(abs(turns[0]), abs(turns[1])):
+            continue
+        scores.append((min(abs(turn) for turn in turns) * distances[candidate], candidate))
+    return max(scores)[1] if scores else None
+
+
 def upper_horn_geometry(
     x_values, z_values, case_id: str = "TC_NACA0012", slice_position: float | None = None,
 ) -> tuple[tuple[float, float], tuple[float, float], float] | None:
     """Detect the upper horn using the matching clean-section reference."""
     is_onera = "ONERAM6" in case_id.upper()
-    reference = onera_clean_reference_points(slice_position) if is_onera and slice_position is not None else naca_clean_reference_points()
+    if is_onera and slice_position is None:
+        return None
+    reference = onera_clean_reference_points(slice_position) if is_onera else naca_clean_reference_points()
     if reference is None:
         return None
     clean_x, clean_z, leading_point = reference
@@ -655,17 +728,47 @@ def upper_horn_geometry(
     if not x.size:
         return None
     if is_onera:
-        # For M6, define the horn independently for every participant and
-        # spanwise slice. The horn is the submitted point extending farthest
-        # upstream (minimum global X); its angle origin is the nearest point
-        # on that slice's clean surface, rather than a shared clean LE point.
-        horn_index = int(np.argmin(x))
+        chord = float(np.ptp(clean_x))
+        if chord <= 0 or len(clean_x) < 2:
+            return None
+        dx = x - leading_point[0]
+        candidates = np.flatnonzero(
+            (z >= 0.02) & (z > leading_point[1])
+            & (dx >= -0.1 * chord) & (dx <= 0.25 * chord)
+        )
+        if not candidates.size:
+            return None
+        # Distance to the clean polyline, not just its sampled vertices, avoids
+        # selecting a tip because the reference mesh happens to be coarse there.
+        clean_points = np.column_stack((clean_x, clean_z))
+        starts = clean_points[:-1]
+        segments = np.diff(clean_points, axis=0)
+        lengths_squared = np.sum(segments * segments, axis=1)
+        nonzero = lengths_squared > 0
+        starts, segments = starts[nonzero], segments[nonzero]
+        lengths_squared = lengths_squared[nonzero]
+        if not len(starts):
+            return None
+        distances = []
+        closest_points = []
+        for index in candidates:
+            point = np.array([x[index], z[index]])
+            fraction = np.clip(np.sum((point - starts) * segments, axis=1) / lengths_squared, 0, 1)
+            closest = starts + fraction[:, None] * segments
+            segment_distances = np.linalg.norm(closest - point, axis=1)
+            nearest = int(np.argmin(segment_distances))
+            distances.append(float(segment_distances[nearest]))
+            closest_points.append(closest[nearest])
+        selected = onera_turning_horn_candidate(
+            x, z, candidates, distances, closest_points, chord
+        )
+        if selected is None:
+            selected = int(np.argmax(distances))
+        horn_index = int(candidates[selected])
         horn_point = (float(x[horn_index]), float(z[horn_index]))
-        surface_index = int(np.argmin(np.hypot(clean_x - horn_point[0], clean_z - horn_point[1])))
-        reference_point = (float(clean_x[surface_index]), float(clean_z[surface_index]))
+        reference_point = tuple(float(value) for value in closest_points[selected])
         horn_angle = math.degrees(math.atan2(
-            horn_point[1] - reference_point[1],
-            horn_point[0] - reference_point[0],
+            horn_point[1] - reference_point[1], horn_point[0] - reference_point[0],
         )) % 360.0
         return reference_point, horn_point, horn_angle
     angle = 0.0 if is_onera else math.radians(NACA0012_ROTATION_DEGREES)
@@ -1026,17 +1129,25 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
             if "NACA0012" in case_id.upper() and roughness_filter is None:
                 trace_name = f"{label} | {format_roughness_title(roughness_key)}"
             if density_model == "variable":
-                trace_name += " | Variable density"
+                trace_name += " | ρ<sub>ice</sub>(s)"
 
             fig.add_trace(
                 go.Scatter(
                     x=plot_data[x_iced_column],
                     y=plot_data[z_iced_column],
-                    mode=participant_trace_mode(participant.participant_id),
+                    mode="lines" if participant_id == "019" else participant_trace_mode(participant.participant_id),
+                    meta={"ipw3_participant_id": participant_id, "ipw3_density_model": density_model},
                 name=trace_name,
                 legendgroup=label,
                 legendrank=participant_legend_rank(participant.participant_id),
-                    line={"color": color, "dash": "dash" if density_model == "variable" else "solid"},
+                    line={
+                        "color": color,
+                        "dash": (
+                            "dashdot" if participant_id == "019" and density_model == "variable"
+                            else "dash" if density_model == "variable"
+                            else "solid"
+                        ),
+                    },
                     marker=participant_marker(participant.participant_id, len(plot_data)),
                     hovertemplate=(
                         f"Participant: {escape(label)}<br>"
@@ -1068,6 +1179,8 @@ def build_single_layer_ice_shape_figure(participants, case_id: str, grid_level: 
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
     leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
+    if leading_x_range is not None and axis_config.get("x_min") is not None:
+        leading_x_range[0] = axis_config["x_min"]
     style_xy_figure(
         fig,
         case_id,
@@ -1164,6 +1277,8 @@ def build_multilayer_ice_shape_figure(participants, case_id: str, grid_level: st
 
     axis_config = ice_shape_axis_config(case_id, slice_filter)
     leading_x_range, leading_y_range = leading_edge_axis_ranges(fig, axis_config["leading_edge_fraction"])
+    if leading_x_range is not None and axis_config.get("x_min") is not None:
+        leading_x_range[0] = axis_config["x_min"]
     style_xy_figure(
         fig,
         case_id,
@@ -1209,7 +1324,7 @@ def build_participant_combined_levels_ice_figure(
                 detail = re.sub(rf"^{re.escape(participant.participant_id)}(?:\.[^ |]+)?\s*", "", original_name).lstrip(" |")
                 trace.name = grid_level + (f" | {detail}" if detail else "")
                 trace.legendgroup = f"{grid_level}_{original_name}"
-                trace.line.dash = GRID_LEVEL_LINE_DASHES[grid_level]
+                trace.line.dash = ice_shape_grid_line_dash(case_id, participant.participant_id, grid_level)
             else:
                 reference_group = str(trace.legendgroup)
                 if reference_group in reference_groups:
