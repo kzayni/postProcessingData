@@ -24,6 +24,12 @@ from tools.participant_highlight import (
 GROUPED_ROUGHNESS_PARTICIPANT_SYMBOL_SIZE = 16
 # Participant symbol size on the plotted curves (pixels).
 GROUPED_ROUGHNESS_PLOT_SYMBOL_SIZE = 9
+# Larger markers used by the L1 and L2 grouped-turbulence ice-shape figures.
+TURBULENCE_MODEL_ICE_PARTICIPANT_SYMBOL_SIZE = 24
+TURBULENCE_MODEL_ICE_PLOT_SYMBOL_SIZE = 18
+# Participant marker sizes for integrated Qc' convergence figures.
+QC_PARTICIPANT_SYMBOL_SIZE = 24
+QC_PLOT_SYMBOL_SIZE = 18
 # Editable paper-coordinate positions for the roughness-line, participant-symbol,
 # and experimental legend rows in grouped-roughness plots.
 # The experimental row is the anchor. Each available row above it is raised
@@ -336,16 +342,12 @@ NACA0012_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
 
     # Grid sensitivity — absolute values
     "AERODYNAMIC/tc_naca0012_ae3932_cd_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cd_vs_n_all_roughness.png", WIDTH, HEIGHT, [], True),
-    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness.png": (
-        "TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness.png",
-        WIDTH, HEIGHT, [], True,
-        {"enabled": False, "value": 0.4677, "color": "#070707", "dash": "solid", "width": 3},
-    ),
-    "AERODYNAMIC/tc_naca0012_ae3932_cmy_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cmy_vs_n_all_roughness.png", WIDTH, HEIGHT, [], True),
+    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness.png", WIDTH, HEIGHT, ["006"], True,),
+    "AERODYNAMIC/tc_naca0012_ae3932_cmy_vs_n_all_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cmy_vs_n_all_roughness.png", WIDTH, HEIGHT, ["006"], True),
 
     # Grid sensitivity — difference from L1
     "AERODYNAMIC/tc_naca0012_ae3932_cd_vs_n_all_roughness_relative_to_l1.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cd_vs_n_all_roughness_relative_to_l1.png", WIDTH, HEIGHT, [], True),
-    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness_relative_to_l1.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness_relative_to_l1.png", WIDTH, HEIGHT, [], True),
+    "AERODYNAMIC/tc_naca0012_ae3932_cl_vs_n_all_roughness_relative_to_l1.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_cl_vs_n_all_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["006"], True),
 
     # HTC - 3932
     # Surface distributions
@@ -379,6 +381,7 @@ NACA0012_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
     "ICE_SHAPES/tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_roughness_unspecified.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness.png", WIDTH, HEIGHT, [], True),
+    "ICE_SHAPES/tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness_panels.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness_panels.png", PANEL_WIDTH, PANEL_HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models_panels.png": ("TC_NACA0012_AE3932", "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models_panels.png", PANEL_WIDTH, PANEL_HEIGHT, [], True),
 
@@ -402,6 +405,7 @@ NACA0012_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
     "ICE_SHAPES/tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness.png", WIDTH, HEIGHT, [], True),
+    "ICE_SHAPES/tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness_panels.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness_panels.png", PANEL_WIDTH, PANEL_HEIGHT, [], True),
     "ICE_SHAPES/tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models_panels.png": ("TC_NACA0012_AE3933", "tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models_panels.png", PANEL_WIDTH, PANEL_HEIGHT, [], True),
 
@@ -936,6 +940,128 @@ def _queue_polimo_bins01_beta_grid_panels(participant, queue, case_dir: Path) ->
     filename = "tc_naca0012_ae3932_beta_bins01_lagrangian_vs_eulerian_grid_panels.png"
     queue.append((figure, case_dir / filename))
     return filename
+
+
+def _queue_polimo_water_mass_method_comparisons(participant, queue, case_dir: Path) -> list[str]:
+    """Queue POLIMO BINS01/BINS07 water-mass Eulerian/Lagrangian comparisons."""
+    import plotly.graph_objects as go
+
+    source = (
+        participant.path / "TC_NACA0012_AE3932_D01"
+        / "TC_NACA0012_3932_BETA_LAG_VS_EUL.dat"
+    )
+    blocks: dict[str, list[tuple[int, float, float]]] = {}
+    current_bins: str | None = None
+    for raw_line in source.read_text().splitlines():
+        line = raw_line.strip()
+        bins_match = re.fullmatch(r"#\s*(\d+)\s+Bins", line, re.IGNORECASE)
+        if bins_match:
+            current_bins = bins_match.group(1).zfill(2)
+            blocks.setdefault(current_bins, [])
+            continue
+        if not line or line.upper().startswith("VARIABLES") or current_bins is None:
+            continue
+        values = line.split()
+        if len(values) != 3:
+            continue
+        level, lagrangian, eulerian = int(float(values[0])), float(values[1]), float(values[2])
+        blocks[current_bins].append((level, lagrangian * 1000.0, eulerian * 1000.0))
+
+    cell_counts = convergence_data_builder.grid_cell_counts_for_case("TC_NACA0012_AE3932")
+    figure = go.Figure()
+    for bins in ("07", "01"):
+        rows = blocks.get(bins, [])
+        if not rows:
+            raise RuntimeError(f"Missing POLIMO BINS{bins} water-mass comparison data in {source.name}")
+        rows = sorted(rows, key=lambda row: cell_counts[row[0]] ** (-1.0 / 3.0))
+        x_values = [cell_counts[level] ** (-1.0 / 3.0) for level, _, _ in rows]
+        for label, color, value_index in (
+            ("Lagrangian", "#d62728", 1),
+            ("Eulerian", "#1f77b4", 2),
+        ):
+            figure.add_trace(go.Scatter(
+                x=x_values,
+                y=[row[value_index] for row in rows],
+                mode="lines+markers",
+                name=f"{label} - {int(bins)} bin" + ("s" if bins != "01" else ""),
+                legendgroup=f"{label.lower()}_bins{bins}",
+                line={
+                    "color": color, "width": 5,
+                    "dash": "solid" if bins == "07" else "dash",
+                },
+                marker={
+                    "color": color,
+                    "symbol": "square" if bins == "01" else "circle",
+                    "size": 14,
+                },
+                customdata=[[f"L{row[0]}"] for row in rows],
+                meta={"ipw3_participant_id": "007"},
+                hovertemplate=(
+                    "%{fullData.name}<br>Grid=%{customdata[0]}<br>"
+                    "h=%{x:.6g}<br>m<sub>water</sub>=%{y:.6g} g<extra></extra>"
+                ),
+            ))
+    convergence_data_builder.style_xy_figure(
+        figure, "TC_NACA0012_AE3932", "water_mass_vs_n",
+        "h = N<sub>cells</sub><sup>−1/3</sup> [-]", "m<sub>water</sub> [g]",
+    )
+    convergence_data_builder.style_grid_level_x_axis(
+        figure, "TC_NACA0012_AE3932",
+    )
+    # Match the grid-convergence axis used by the main-presentation water-mass
+    # figures.  The generic helper expands to the full 10^-3 decade, which
+    # leaves these four NACA0012 grid levels unnecessarily compressed.
+    figure.update_xaxes(
+        type="log",
+        range=[-2.65, -2.20],
+        autorange=False,
+        tickmode="array",
+        dtick=None,
+        tickvals=[2.556e-3, 3.334e-3, 4.486e-3, 5.546e-3],
+        ticktext=[
+            "2×10<sup>−3</sup>",
+            "3×10<sup>−3</sup>",
+            "4×10<sup>−3</sup>",
+            "5×10<sup>−3</sup>",
+        ],
+        ticks="outside",
+        showticklabels=True,
+        showgrid=True,
+        minor={
+            "tickmode": "array",
+            "tickvals": [2.9192e-3, 3.8673e-3, 4.9879e-3],
+            "showgrid": True,
+            "ticks": "outside",
+            "ticklen": 4,
+            "tickcolor": "black",
+            "gridcolor": "#b0b0b0",
+        },
+        automargin=True,
+        title_text="N<sub>cells</sub><sup>−1/3</sup> [-]",
+    )
+    figure.update_layout(
+        width=WIDTH,
+        height=HEIGHT,
+        font={"family": "Arial, Helvetica, sans-serif", "size": 32},
+        legend={
+            "orientation": "h", "x": 0.0, "xanchor": "left",
+            "y": 1.02, "yanchor": "bottom", "font": {"size": 24},
+        },
+        margin={"l": 100, "r": 50, "t": 125, "b": 85},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+    )
+    figure.update_xaxes(title_font={"size": 36}, tickfont={"size": 28})
+    figure.update_yaxes(
+        title_font={"size": 36}, tickfont={"size": 28},
+        title_standoff=50, automargin=True,
+    )
+    filename = (
+        "tc_naca0012_ae3932_water_mass_vs_n_"
+        "lagrangian_vs_eulerian_bins01_bins07.png"
+    )
+    queue.append((figure, case_dir / filename))
+    return [filename]
 
 
 def _queue_beta_droplet_model_groups(queue, case_dir: Path) -> None:
@@ -1492,7 +1618,7 @@ def write_naca0012_presentation_figures(
             )
             iceshape_builder.PNG_EXPORT_QUEUE.append((grouped_figure, source_path.with_name(ice_special_name)))
 
-            if ice_grid_level == "L1":
+            if ice_grid_level in {"L1", "L2"}:
                 model_figure = type(grouped_figure)(grouped_figure)
                 model_traces = []
                 shown_combinations: set[str] = set()
@@ -1726,6 +1852,12 @@ def write_naca0012_presentation_figures(
                     y_min, y_max = ice_mass_y_range_by_case[case_id]
                     figure.update_yaxes(range=[y_min, y_max], autorange=False)
 
+                if export_path.stem in {
+                    "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins",
+                    "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins",
+                }:
+                    figure.update_yaxes(range=[80.0, 130.0], autorange=False)
+
                 qc_prime_y_range = (0.0, 400.0)
                 if "_qc_prime_" in export_path.name.lower():
                     y_min, y_max = qc_prime_y_range
@@ -1928,6 +2060,16 @@ def write_naca0012_presentation_figures(
                 "TC_NACA0012_AE3932", bins01_panel_name,
                 PANEL_WIDTH, 1400, [], True,
             )
+            water_mass_comparison_names = _queue_polimo_water_mass_method_comparisons(
+                polimo,
+                convergence_data_builder.PNG_EXPORT_QUEUE,
+                staging_dir / "TC_NACA0012_AE3932",
+            )
+            for water_mass_name in water_mass_comparison_names:
+                presentation_figures[f"IMPINGEMENT/{water_mass_name}"] = (
+                    "TC_NACA0012_AE3932", water_mass_name,
+                    WIDTH, HEIGHT, [], True,
+                )
             _replace_cp_with_champs_grid_levels(
                 cutdata_builder.PNG_EXPORT_QUEUE,
                 {
@@ -2176,14 +2318,50 @@ def write_naca0012_presentation_figures(
                         row_shift=GROUPED_LEGEND_ROW_SHIFT)
 
                 if "_grouped_turbulence_models" in export_path.stem:
+                    is_ice_turbulence_figure = export_path.stem in {
+                        "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                        "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                        "tc_naca0012_ae3933_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                        "tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                    }
                     apply_roughness_participant_legend(figure, GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS,
-                        participant_symbol_size=GROUPED_ROUGHNESS_PARTICIPANT_SYMBOL_SIZE,
-                        plot_symbol_size=GROUPED_ROUGHNESS_PLOT_SYMBOL_SIZE,
+                        participant_symbol_size=(
+                            TURBULENCE_MODEL_ICE_PARTICIPANT_SYMBOL_SIZE
+                            if is_ice_turbulence_figure
+                            else GROUPED_ROUGHNESS_PARTICIPANT_SYMBOL_SIZE
+                        ),
+                        plot_symbol_size=(
+                            TURBULENCE_MODEL_ICE_PLOT_SYMBOL_SIZE
+                            if is_ice_turbulence_figure
+                            else GROUPED_ROUGHNESS_PLOT_SYMBOL_SIZE
+                        ),
                         roughness_position={"x": GROUPED_ROUGHNESS_LEGEND_X},
                         participant_position={"x": GROUPED_PARTICIPANT_LEGEND_X},
                         experimental_position=GROUPED_EXPERIMENTAL_LEGEND_POSITION,
                         row_shift=GROUPED_LEGEND_ROW_SHIFT,
                         group_token="_turbulence_model_")
+
+                    if export_path.stem in {
+                        "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                        "tc_naca0012_ae3932_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                        "tc_naca0012_ae3933_L2_single_layer_ice_shape_slice_0p9144_bins15_grouped_turbulence_models",
+                    }:
+                        for trace in figure.data:
+                            trace_meta = trace.meta if isinstance(trace.meta, dict) else {}
+                            participant_id_value = str(
+                                trace_meta.get("ipw3_participant_id", "")
+                            ).zfill(3)
+                            if participant_id_value not in GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS:
+                                continue
+                            trace.mode = "lines+markers"
+                            trace.marker.update(
+                                symbol=GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS[participant_id_value],
+                                size=TURBULENCE_MODEL_ICE_PLOT_SYMBOL_SIZE,
+                            )
+                            trace.line.update(
+                                dash="solid",
+                                width=6 if participant_id_value == "003" else 5,
+                            )
 
                 if "_grouped_thermodynamics_models" in export_path.stem:
                     apply_roughness_participant_legend(figure, GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS,
@@ -2204,6 +2382,41 @@ def write_naca0012_presentation_figures(
                         experimental_position=GROUPED_EXPERIMENTAL_LEGEND_POSITION,
                         row_shift=GROUPED_LEGEND_ROW_SHIFT,
                         group_token="_droplet_model_")
+
+                if (
+                    "_qc_prime_" in export_path.stem.lower()
+                    and any(group_name in export_path.stem for group_name in (
+                        "_grouped_roughness", "_grouped_turbulence_models",
+                    ))
+                ):
+                    for trace in figure.data:
+                        trace_meta = trace.meta if isinstance(trace.meta, dict) else {}
+                        participant_id_value = str(
+                            trace_meta.get("ipw3_participant_id", "")
+                        ).zfill(3)
+                        if participant_id_value in GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS:
+                            trace.mode = "lines+markers"
+                            trace.marker.update(
+                                symbol=GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS[participant_id_value],
+                                size=QC_PLOT_SYMBOL_SIZE,
+                            )
+                        participant_symbol_match = re.fullmatch(
+                            r"participant_symbol_(\d{3})",
+                            str(trace.legendgroup or ""),
+                        )
+                        if participant_symbol_match:
+                            trace.marker.update(size=QC_PARTICIPANT_SYMBOL_SIZE)
+
+                if re.fullmatch(
+                    r"tc_naca0012_ae393[23]_qc_prime_vs_n_y_0\.9144",
+                    export_path.stem.lower(),
+                ):
+                    for trace in figure.data:
+                        trace_meta = trace.meta if isinstance(trace.meta, dict) else {}
+                        if trace_meta.get("ipw3_participant_id") is None:
+                            continue
+                        trace.mode = "lines+markers"
+                        trace.marker.update(symbol="circle", size=QC_PLOT_SYMBOL_SIZE)
 
                 if ((any(key in export_path.stem for key in (
                     "_htc_vs_s_", "_surface_temperature_vs_s_", "_freezing_fraction_vs_s_",
@@ -2394,7 +2607,10 @@ def write_naca0012_presentation_figures(
                         trace = go.Scatter(original.to_plotly_json())
                         trace.update(xaxis=None, yaxis=None)
                         trace.line.update(color=color, width=5, dash="solid")
-                        trace.marker.update(color=color)
+                        trace.marker.update(
+                            color=color,
+                            size=TURBULENCE_MODEL_ICE_PLOT_SYMBOL_SIZE,
+                        )
                         trace.name = f'{model_style["label"]} - {roughness_labels[roughness_group]}'
                         combination = f"ice_turbulence_model_{model_key}_{roughness_group}"
                         trace.legendgroup = combination
@@ -2430,8 +2646,12 @@ def write_naca0012_presentation_figures(
                         str(original.legendgroup or ""),
                     )
                     if symbol_match and symbol_match.group(1) in included_participants:
+                        symbol_trace = go.Scatter(original.to_plotly_json())
+                        symbol_trace.marker.update(
+                            size=TURBULENCE_MODEL_ICE_PARTICIPANT_SYMBOL_SIZE,
+                        )
                         model_panels.add_trace(
-                            go.Scatter(original.to_plotly_json()), row=1, col=1,
+                            symbol_trace, row=1, col=1,
                         )
                 model_panels.update_annotations(font=dict(size=40), yshift=12)
                 model_panels.update_xaxes(
@@ -2605,6 +2825,7 @@ def write_naca0012_presentation_figures(
                         or destination.endswith(target)
                         or destination.endswith(eulerian_beta_grid_name)
                         or destination.endswith(bins01_panel_name)
+                        or Path(destination).name in water_mass_comparison_names
                     )
                     and (
                         not destination.startswith("HTC/")

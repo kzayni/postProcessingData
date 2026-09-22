@@ -5,7 +5,8 @@ from plotly.subplots import make_subplots
 
 
 def build_roughness_participant_panels(
-    source, *, ice_shapes=False, columns=None, participant_title_size=30
+    source, *, ice_shapes=False, columns=None, participant_title_size=30,
+    participant_model_labels=None,
 ):
     curves = {}
     for trace in source.data:
@@ -27,7 +28,8 @@ def build_roughness_participant_panels(
         positions[-1] = (rows, 2)
     titles = [''] * (rows * cols)
     for pid, (row, col) in zip(ids, positions):
-        titles[(row - 1) * cols + col - 1] = f'Participant {pid}'
+        model = (participant_model_labels or {}).get(pid)
+        titles[(row - 1) * cols + col - 1] = f'Participant {pid} ({model})' if model else f'Participant {pid}'
     fig = make_subplots(rows=rows, cols=cols, subplot_titles=titles,
                         horizontal_spacing=0.06 if ice_shapes else 0.09, vertical_spacing=0.24 / rows if ice_shapes else 0.32 / rows)
     first_row, first_col = positions[0]
@@ -82,7 +84,7 @@ def build_roughness_participant_panels(
         panel_width = xaxis.domain[1] - xaxis.domain[0]
         xaxis.domain = [0.5 - panel_width / 2, 0.5 + panel_width / 2]
         for annotation in fig.layout.annotations:
-            if annotation.text == f'Participant {ids[-1]}':
+            if annotation.text == titles[(last_row - 1) * cols + last_col - 1]:
                 annotation.x = 0.5
                 break
     fig.update_layout(width=1800, height=rows * 470 + 150,

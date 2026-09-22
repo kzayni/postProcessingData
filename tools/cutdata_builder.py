@@ -816,7 +816,7 @@ def cut_data_for_plot(dataset_data, plot_spec: dict[str, Any] | None = None):
     supplemental_data = getattr(dataset_data, "cp_beta_cut_data", None)
     if supplemental_data is not None:
         supplemental_variables = {variable.lower() for variable in supplemental_data.variables}
-        if plot_key.startswith("cp_vs_") and "cp" in supplemental_variables:
+        if (plot_key.startswith("cp_vs_") or (plot_spec or {}).get("derived_recovery_temperature")) and "cp" in supplemental_variables:
             return supplemental_data
         if plot_key.startswith("beta_") and "beta" in supplemental_variables:
             return supplemental_data

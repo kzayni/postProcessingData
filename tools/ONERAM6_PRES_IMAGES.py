@@ -12,8 +12,6 @@ import tempfile
 import numpy
 
 from tools import convergence_data_builder, cutdata_builder, iceshape_builder
-from tools.participant_horn_export import participant_horn_method_figures
-from tools.ice_limits_export import ice_limit_figures
 from tools.gatherParticipantData import CASE_SLICES, VALID_GRID_LEVELS
 
 
@@ -49,7 +47,7 @@ GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS = {
 
 ONERAM6_TURBULENCE_MODEL_STYLES = {
     "kw": {
-        "participant_ids": {"001", "002", "004", "008", "009", "019"},
+        "participant_ids": {"001", "002", "004", "008", "009", "015", "019"},
         "label": "k-ω",
         "color": "#1f77b4",
         "rank": 0,
@@ -62,14 +60,20 @@ ONERAM6_TURBULENCE_MODEL_STYLES = {
     },
 }
 
+ONERAM6_PARTICIPANT_TURBULENCE_LABELS = {
+    participant_id: style["label"]
+    for style in ONERAM6_TURBULENCE_MODEL_STYLES.values()
+    for participant_id in style["participant_ids"]
+}
+
 ONERAM6_TURBULENCE_ROUGHNESS_COLORS = {
     "kw": {
-        "0.5mm": "#56B4E9", "1mm": "#1F4E9E",
-        "1.5mm": "#0072B2", "variable_roughness": "#7B2CBF",
+        "0.5mm": "#1F77B4", "1mm": "#2CA02C",
+        "1.5mm": "#D62728", "variable_roughness": "#7B2CBF",
     },
     "sa": {
-        "0.5mm": "#ff7f0e", "1mm": "#d62728",
-        "1.5mm": "#A50F15", "variable_roughness": "#800020",
+        "0.5mm": "#1F77B4", "1mm": "#2CA02C",
+        "1.5mm": "#D62728", "variable_roughness": "#7B2CBF",
     },
 }
 
@@ -78,6 +82,8 @@ OUTPUT_DIR = Path("FIGURES_ONERAM6")
 # Standard ONERA M6 presentation canvas in pixels.
 WIDTH = 1350
 HEIGHT = 1000
+PANEL_WIDTH = 2000
+PANEL_HEIGHT = 1400
 
 MedianLineConfig = dict[str, object]
 FigureSpec = tuple[str, str, int, int, list[str], bool] | tuple[
@@ -91,16 +97,16 @@ FigureSpec = tuple[str, str, int, int, list[str], bool] | tuple[
 #         optional grid-median configuration).
 # Use [] to include everyone; for example, ["001", "014"] excludes those participants.
 ONERAM6_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
-    "ICE_ACCRETION/tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins.png": (CASE_ID, "tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins.png", WIDTH, HEIGHT, [], True),
+    "ICE_ACCRETION/tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins.png": (CASE_ID, "tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins.png", WIDTH, HEIGHT, ["001"], True),
     "ICE_ACCRETION/tc_oneram6_water_evap_mass_vs_n_1mm_l1_vs_inverse_bins.png": (CASE_ID, "tc_oneram6_water_evap_mass_vs_n_1mm_l1_vs_inverse_bins.png", WIDTH, HEIGHT, ["001"], True),
     "ICE_ACCRETION/tc_oneram6_water_evap_mass_vs_n_1mm_bins15_all_grid_levels.png": (CASE_ID, "tc_oneram6_water_evap_mass_vs_n_1mm_bins15_all_grid_levels.png", WIDTH, HEIGHT, ["001"], True),
     "ICE_ACCRETION/tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins_relative_to_bins15.png": (CASE_ID, "tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins_relative_to_bins15.png", WIDTH, HEIGHT, [], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness.png", WIDTH, HEIGHT, ["001","002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["001","002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["001", "002"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1_grouped_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75_grouped_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4_grouped_roughness_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
     "SURF_TEMP_FF/tc_oneram6_mean_surface_temperature_vs_n_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_mean_surface_temperature_vs_n_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, ["001"], True),
     "SURF_TEMP_FF/tc_oneram6_mean_surface_temperature_vs_n_slice_0p1_roughness_1mm_relative_to_l1.png": (CASE_ID, "tc_oneram6_mean_surface_temperature_vs_n_slice_0p1_roughness_1mm_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
     "SURF_TEMP_FF/tc_oneram6_mean_surface_temperature_vs_n_slice_0p1_grouped_roughness.png": (CASE_ID, "tc_oneram6_mean_surface_temperature_vs_n_slice_0p1_grouped_roughness.png", WIDTH, HEIGHT, ["001"], True),
@@ -141,7 +147,7 @@ ONERAM6_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
     "AERODYNAMIC/tc_oneram6_cl_vs_n_1mm_relative_to_l1.png": (CASE_ID, "tc_oneram6_cl_vs_n_1mm_relative_to_l1.png", WIDTH, HEIGHT, [], True),
     "AERODYNAMIC/tc_oneram6_cd_vs_n_1mm_relative_to_l1.png": (CASE_ID, "tc_oneram6_cd_vs_n_1mm_relative_to_l1.png", WIDTH, HEIGHT, [], True),
     "AERODYNAMIC/tc_oneram6_cmy_vs_n_1mm_relative_to_l1.png": (CASE_ID, "tc_oneram6_cmy_vs_n_1mm_relative_to_l1.png", WIDTH, HEIGHT, [], True),
-    "IMPINGEMENT/tc_oneram6_water_mass_vs_n_1mm_bins15_all_grid_levels.png": (CASE_ID, "tc_oneram6_water_mass_vs_n_1mm_bins15_all_grid_levels.png", WIDTH, HEIGHT, ["015"], True),
+    "IMPINGEMENT/tc_oneram6_water_mass_vs_n_1mm_bins15_all_grid_levels.png": (CASE_ID, "tc_oneram6_water_mass_vs_n_1mm_bins15_all_grid_levels.png", WIDTH, HEIGHT, [], True),
     "IMPINGEMENT/tc_oneram6_water_mass_vs_n_1mm_bins15_all_grid_levels_relative_to_l1.png": (CASE_ID, "tc_oneram6_water_mass_vs_n_1mm_bins15_all_grid_levels_relative_to_l1.png", WIDTH, HEIGHT, ["015"], True),
     "IMPINGEMENT/tc_oneram6_water_mass_vs_n_1mm_l1_vs_inverse_bins.png": (CASE_ID, "tc_oneram6_water_mass_vs_n_1mm_l1_vs_inverse_bins.png", WIDTH, HEIGHT, ["001", "015"], True),
     "IMPINGEMENT/tc_oneram6_water_mass_vs_n_1mm_l2_vs_inverse_bins.png": (CASE_ID, "tc_oneram6_water_mass_vs_n_1mm_l2_vs_inverse_bins.png", WIDTH, HEIGHT, ["001", "015"], True),
@@ -163,9 +169,9 @@ ONERAM6_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
     "AERODYNAMIC/tc_oneram6_L1_cp_vs_x_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_cp_vs_x_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "HTC/tc_oneram6_L1_htc_vs_s_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_htc_vs_s_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "HTC/tc_oneram6_L1_recovery_temperature_vs_s_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_recovery_temperature_vs_s_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, [], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1_relative_to_l1.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "IMPINGEMENT/tc_oneram6_L1_beta_bins15_vs_s_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_beta_bins15_vs_s_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, ["015"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.1_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.1_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
+    "IMPINGEMENT/tc_oneram6_L1_beta_bins15_vs_s_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_beta_bins15_vs_s_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, ["001", "015"], True),
     "SURF_TEMP_FF/tc_oneram6_L1_surface_temperature_vs_s_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_surface_temperature_vs_s_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "SURF_TEMP_FF/tc_oneram6_L1_freezing_fraction_vs_s_slice_0p1_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_freezing_fraction_vs_s_slice_0p1_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_oneram6_L1_single_layer_ice_shape_slice_0p1_bins15_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_single_layer_ice_shape_slice_0p1_bins15_roughness_1mm.png", WIDTH, HEIGHT, [], True),
@@ -180,9 +186,9 @@ ONERAM6_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
     "AERODYNAMIC/tc_oneram6_L1_cp_vs_x_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_cp_vs_x_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "HTC/tc_oneram6_L1_htc_vs_s_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_htc_vs_s_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "HTC/tc_oneram6_L1_recovery_temperature_vs_s_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_recovery_temperature_vs_s_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, [], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75_relative_to_l1.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "IMPINGEMENT/tc_oneram6_L1_beta_bins15_vs_s_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_beta_bins15_vs_s_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, ["015"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_0.75_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_0.75_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
+    "IMPINGEMENT/tc_oneram6_L1_beta_bins15_vs_s_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_beta_bins15_vs_s_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, ["001", "015"], True),
     "SURF_TEMP_FF/tc_oneram6_L1_surface_temperature_vs_s_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_surface_temperature_vs_s_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "SURF_TEMP_FF/tc_oneram6_L1_freezing_fraction_vs_s_slice_0p75_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_freezing_fraction_vs_s_slice_0p75_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_oneram6_L1_single_layer_ice_shape_slice_0p75_bins15_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_single_layer_ice_shape_slice_0p75_bins15_roughness_1mm.png", WIDTH, HEIGHT, [], True),
@@ -197,9 +203,9 @@ ONERAM6_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
     "AERODYNAMIC/tc_oneram6_L1_cp_vs_x_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_cp_vs_x_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "HTC/tc_oneram6_L1_htc_vs_s_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_htc_vs_s_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "HTC/tc_oneram6_L1_recovery_temperature_vs_s_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_recovery_temperature_vs_s_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, [], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4_relative_to_l1.png", WIDTH, HEIGHT, ["001", "002"], True),
-    "IMPINGEMENT/tc_oneram6_L1_beta_bins15_vs_s_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_beta_bins15_vs_s_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, ["015"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4.png", WIDTH, HEIGHT, ["001"], True),
+    "HTC/tc_oneram6_qc_prime_vs_n_y_1.4_relative_to_l1.png": (CASE_ID, "tc_oneram6_qc_prime_vs_n_y_1.4_relative_to_l1.png", WIDTH, HEIGHT, ["001"], True),
+    "IMPINGEMENT/tc_oneram6_L1_beta_bins15_vs_s_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_beta_bins15_vs_s_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, ["001", "015"], True),
     "SURF_TEMP_FF/tc_oneram6_L1_surface_temperature_vs_s_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_surface_temperature_vs_s_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "SURF_TEMP_FF/tc_oneram6_L1_freezing_fraction_vs_s_slice_1p4_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_freezing_fraction_vs_s_slice_1p4_roughness_1mm.png", WIDTH, HEIGHT, [], True),
     "ICE_SHAPES/tc_oneram6_L1_single_layer_ice_shape_slice_1p4_bins15_roughness_1mm.png": (CASE_ID, "tc_oneram6_L1_single_layer_ice_shape_slice_1p4_bins15_roughness_1mm.png", WIDTH, HEIGHT, [], True),
@@ -210,14 +216,20 @@ ONERAM6_PRESENTATION_FIGURES: dict[str, FigureSpec] = {
 # companion PNGs are created automatically from each grouped figure.
 for _slice_value in CASE_SLICES[CASE_ID]:
     _slice_slug = str(_slice_value).replace(".", "p")
-    for _roughness_slug in ("0p5mm", "1mm", "1p5mm", "variable"):
-        _filename = (
-            f"tc_oneram6_L1_htc_vs_s_slice_{_slice_slug}_"
-            f"roughness_{_roughness_slug}_grouped_turbulence_models.png"
-        )
-        ONERAM6_PRESENTATION_FIGURES[f"HTC/{_filename}"] = (
-            CASE_ID, _filename, WIDTH, HEIGHT, ["015"], True,
-        )
+    _one_mm_filename = (
+        f"tc_oneram6_L1_htc_vs_s_slice_{_slice_slug}_"
+        "roughness_1mm_grouped_turbulence_models.png"
+    )
+    ONERAM6_PRESENTATION_FIGURES[f"HTC/{_one_mm_filename}"] = (
+        CASE_ID, _one_mm_filename, WIDTH, HEIGHT, [], True,
+    )
+    _filename = (
+        f"tc_oneram6_L1_htc_vs_s_slice_{_slice_slug}_"
+        "grouped_turbulence_models_roughness_panels.png"
+    )
+    ONERAM6_PRESENTATION_FIGURES[f"HTC/{_filename}"] = (
+        CASE_ID, _filename, PANEL_WIDTH, PANEL_HEIGHT, ["015"], True,
+    )
     _filename = (
         f"tc_oneram6_L1_htc_vs_s_slice_{_slice_slug}_"
         "grouped_turbulence_models.png"
@@ -226,13 +238,27 @@ for _slice_value in CASE_SLICES[CASE_ID]:
         CASE_ID, _filename, WIDTH, HEIGHT, ["015"], True,
     )
     for _variable in ("surface_temperature", "freezing_fraction"):
+        _one_mm_filename = (
+            f"tc_oneram6_L1_{_variable}_vs_s_slice_{_slice_slug}_"
+            "roughness_1mm_grouped_turbulence_models.png"
+        )
+        ONERAM6_PRESENTATION_FIGURES[f"SURF_TEMP_FF/{_one_mm_filename}"] = (
+            CASE_ID, _one_mm_filename, WIDTH, HEIGHT, [], True,
+        )
         _filename = (
             f"tc_oneram6_L1_{_variable}_vs_s_slice_{_slice_slug}_"
-            "grouped_turbulence_models.png"
+            "grouped_turbulence_models_roughness_panels.png"
         )
         ONERAM6_PRESENTATION_FIGURES[f"SURF_TEMP_FF/{_filename}"] = (
-            CASE_ID, _filename, WIDTH, HEIGHT, ["015"], True,
+            CASE_ID, _filename, PANEL_WIDTH, PANEL_HEIGHT, ["015"], True,
         )
+    _qc_one_mm_filename = (
+        f"tc_oneram6_qc_prime_vs_n_y_{_slice_value}_"
+        "roughness_1mm_grouped_turbulence_models.png"
+    )
+    ONERAM6_PRESENTATION_FIGURES[f"HTC/{_qc_one_mm_filename}"] = (
+        CASE_ID, _qc_one_mm_filename, WIDTH, HEIGHT, [], True,
+    )
     for _variable in ("surface_temperature", "freezing_fraction"):
         _filename = f"tc_oneram6_L1_{_variable}_vs_s_slice_{_slice_slug}_grouped_roughness.png"
         ONERAM6_PRESENTATION_FIGURES[f"SURF_TEMP_FF/{_filename}"] = (
@@ -243,14 +269,13 @@ for _slice_value in CASE_SLICES[CASE_ID]:
     _slice_slug = str(_slice_value).replace(".", "p")
     _filename = f"tc_oneram6_L1_single_layer_ice_shape_slice_{_slice_slug}_bins07_grouped_roughness.png"
     ONERAM6_PRESENTATION_FIGURES[f"ICE_SHAPES/{_filename}"] = (CASE_ID, _filename, WIDTH, HEIGHT, [], True)
-    for _roughness_slug in ("0p5mm", "1mm", "1p5mm", "variable"):
-        _filename = (
-            f"tc_oneram6_L1_single_layer_ice_shape_slice_{_slice_slug}_bins07_"
-            f"roughness_{_roughness_slug}_grouped_turbulence_models.png"
-        )
-        ONERAM6_PRESENTATION_FIGURES[f"ICE_SHAPES/{_filename}"] = (
-            CASE_ID, _filename, WIDTH, HEIGHT, ["015"], True,
-        )
+    _filename = (
+        f"tc_oneram6_L1_single_layer_ice_shape_slice_{_slice_slug}_bins07_"
+        "grouped_turbulence_models_roughness_panels.png"
+    )
+    ONERAM6_PRESENTATION_FIGURES[f"ICE_SHAPES/{_filename}"] = (
+        CASE_ID, _filename, PANEL_WIDTH, PANEL_HEIGHT, ["015"], True,
+    )
     _filename = (
         f"tc_oneram6_L1_single_layer_ice_shape_slice_{_slice_slug}_bins07_"
         "grouped_turbulence_models.png"
@@ -265,7 +290,14 @@ for _slice_value in CASE_SLICES[CASE_ID]:
     _slug = str(_slice_value).replace(".", "p")
     _example = f"tc_oneram6_010_slice_{_slug}_upper_horn_angle_method.png"
     ONERAM6_PRESENTATION_FIGURES[f"ICE_HORNS/{_example}"] = (CASE_ID, _example, WIDTH, HEIGHT, [], False)
-    for _selection in ("bins15_roughness_1mm", "bins07_grouped_roughness"):
+    _roughness_panel = (
+        f"tc_oneram6_upper_horn_angle_vs_n_slice_{_slug}_"
+        "bins07_grouped_roughness_panels.png"
+    )
+    ONERAM6_PRESENTATION_FIGURES[f"ICE_HORNS/{_roughness_panel}"] = (
+        CASE_ID, _roughness_panel, PANEL_WIDTH, PANEL_HEIGHT, [], True,
+    )
+    for _selection in ("bins15_roughness_1mm",):
         for _relative in ("", "_relative_to_l1"):
             _name = f"tc_oneram6_upper_horn_angle_vs_n_slice_{_slug}_{_selection}{_relative}.png"
             ONERAM6_PRESENTATION_FIGURES[f"ICE_HORNS/{_name}"] = (CASE_ID, _name, WIDTH, HEIGHT, [], True)
@@ -276,10 +308,10 @@ for _slice_value in CASE_SLICES[CASE_ID]:
 
 # Independent M6 HTC styles: all participants share the roughness style.
 HTC_ROUGHNESS_STYLES = {
-    "0.5mm": ("0.5 mm", "#2CA02C", "circle"),
-    "1mm": ("1 mm", "#D62728", "square"),
-    "1.5mm": ("1.5 mm", "#1F77B4", "diamond"),
-    "variable_roughness": ("Variable", "#000000", "triangle-up"),
+    "0.5mm": ("0.5 mm", "#1F77B4", "circle"),
+    "1mm": ("1 mm", "#2CA02C", "square"),
+    "1.5mm": ("1.5 mm", "#D62728", "diamond"),
+    "variable_roughness": ("Variable", "#7B2CBF", "triangle-up"),
 }
 
 
@@ -287,10 +319,10 @@ HTC_ROUGHNESS_STYLES = {
 # Keep these coefficient colors separate from the HTC palette for easy editing.
 COEFFICIENT_ROUGHNESS_STYLES = {
     "smooth": ("Smooth", "#000000"),
-    "0.5mm": ("0.5 mm", "#2CA02C"),
-    "1mm": ("1 mm", "#D62728"),
-    "1.5mm": ("1.5 mm", "#1F77B4"),
-    "variable_roughness": ("Variable", "#FF7F0E"),
+    "0.5mm": ("0.5 mm", "#1F77B4"),
+    "1mm": ("1 mm", "#2CA02C"),
+    "1.5mm": ("1.5 mm", "#D62728"),
+    "variable_roughness": ("Variable", "#7B2CBF"),
 }
 
 COEFFICIENT_MATRIX_PARTICIPANTS = {"004", "010", "019"}
@@ -362,8 +394,10 @@ def _queue_coefficients_by_roughness(participants, case_dir: Path) -> None:
             combined.update_yaxes(range=[min(values) - padding, max(values) + padding],
                                   autorange=False, dtick=None)
         matrix = build_roughness_participant_panels(
-            combined, columns=2, participant_title_size=30,
+            combined, columns=3, participant_title_size=30,
+            participant_model_labels=ONERAM6_PARTICIPANT_TURBULENCE_LABELS,
         )
+        matrix.update_layout(legend={"y": 1.16})
         convergence_data_builder.PNG_EXPORT_QUEUE.append((matrix, case_dir / matrix_name))
 
 
@@ -407,7 +441,9 @@ def _queue_all_roughness_htc(participants, case_dir: Path) -> None:
 
 
 def _queue_turbulence_roughness_htc(case_dir: Path) -> None:
-    """Make per-roughness and all-roughness M6 HTC model comparisons."""
+    """Make 2x2 roughness panels and an all-roughness M6 HTC comparison."""
+    from plotly.subplots import make_subplots
+
     roughness_slugs = {
         "0.5mm": "0p5mm",
         "1mm": "1mm",
@@ -426,6 +462,7 @@ def _queue_turbulence_roughness_htc(case_dir: Path) -> None:
         all_grouped = type(source)(layout=source.layout)
         all_grouped_traces = []
         shown_combinations = set()
+        roughness_figures = []
         for roughness_key, roughness_slug in roughness_slugs.items():
             grouped = type(source)(source)
             grouped_traces = []
@@ -433,10 +470,7 @@ def _queue_turbulence_roughness_htc(case_dir: Path) -> None:
             for trace in grouped.data:
                 participant_id = get_trace_participant_id(trace)
                 meta = dict(trace.meta) if isinstance(trace.meta, dict) else {}
-                if (
-                    participant_id == "015"
-                    or meta.get("ipw3_roughness_key") != roughness_key
-                ):
+                if meta.get("ipw3_roughness_key") != roughness_key:
                     continue
                 model_key = next((
                     key for key, style in ONERAM6_TURBULENCE_MODEL_STYLES.items()
@@ -470,23 +504,22 @@ def _queue_turbulence_roughness_htc(case_dir: Path) -> None:
             grouped.data = tuple(
                 sorted(grouped_traces, key=lambda trace: trace.legendrank)
             )
-            output_name = (
-                f"tc_oneram6_L1_htc_vs_s_slice_{slug}_roughness_{roughness_slug}"
-                "_grouped_turbulence_models.png"
-            )
-            cutdata_builder.PNG_EXPORT_QUEUE.append(
-                (grouped, case_dir / output_name)
-            )
+            roughness_figures.append((HTC_ROUGHNESS_STYLES[roughness_key][0], grouped))
+            if roughness_key == "1mm":
+                one_mm_name = (
+                    f"tc_oneram6_L1_htc_vs_s_slice_{slug}_roughness_1mm_"
+                    "grouped_turbulence_models.png"
+                )
+                cutdata_builder.PNG_EXPORT_QUEUE.append((
+                    type(grouped)(grouped), case_dir / one_mm_name,
+                ))
             roughness_label = HTC_ROUGHNESS_STYLES[roughness_key][0]
             roughness_rank = tuple(roughness_slugs).index(roughness_key)
             for source_trace in source.data:
                 trace = type(source_trace)(source_trace)
                 participant_id = get_trace_participant_id(trace)
                 meta = dict(trace.meta) if isinstance(trace.meta, dict) else {}
-                if (
-                    participant_id == "015"
-                    or meta.get("ipw3_roughness_key") != roughness_key
-                ):
+                if meta.get("ipw3_roughness_key") != roughness_key:
                     continue
                 model_key = next((
                     key for key, style in ONERAM6_TURBULENCE_MODEL_STYLES.items()
@@ -511,6 +544,41 @@ def _queue_turbulence_roughness_htc(case_dir: Path) -> None:
                 trace.showlegend = group not in shown_combinations
                 shown_combinations.add(group)
                 all_grouped_traces.append(trace)
+        panels = make_subplots(
+            rows=2, cols=2, horizontal_spacing=0.08, vertical_spacing=0.14,
+            subplot_titles=tuple(label for label, _ in roughness_figures),
+        )
+        shown_panel_groups = set()
+        for index, (_, grouped) in enumerate(roughness_figures):
+            row, col = divmod(index, 2)
+            row += 1
+            col += 1
+            for original in grouped.data:
+                trace = type(original)(original)
+                trace.showlegend = trace.legendgroup not in shown_panel_groups
+                shown_panel_groups.add(trace.legendgroup)
+                panels.add_trace(trace, row=row, col=col)
+            source_xaxis = grouped.layout.xaxis.to_plotly_json()
+            source_yaxis = grouped.layout.yaxis.to_plotly_json()
+            source_xaxis.pop("domain", None)
+            source_xaxis.pop("anchor", None)
+            source_yaxis.pop("domain", None)
+            source_yaxis.pop("anchor", None)
+            panels.update_xaxes(**source_xaxis, row=row, col=col)
+            panels.update_yaxes(**source_yaxis, row=row, col=col)
+        for col in (1, 2):
+            panels.update_xaxes(title_text="Surface distance from highlight [m]", row=2, col=col)
+        panels.update_yaxes(title_text="HTC [W/(m²·K)]", row=1, col=1)
+        panels.update_yaxes(title_text="HTC [W/(m²·K)]", row=2, col=1)
+        panels.update_yaxes(title_text="", row=1, col=2)
+        panels.update_yaxes(title_text="", row=2, col=2)
+        panels.update_annotations(font={"size": 34})
+        panels.update_layout(showlegend=True)
+        panel_name = (
+            f"tc_oneram6_L1_htc_vs_s_slice_{slug}_"
+            "grouped_turbulence_models_roughness_panels.png"
+        )
+        cutdata_builder.PNG_EXPORT_QUEUE.append((panels, case_dir / panel_name))
         if not all_grouped_traces:
             raise RuntimeError(f"No combined M6 HTC turbulence-model data for slice {slice_value}")
         all_grouped.add_traces(sorted(
@@ -526,6 +594,7 @@ def _queue_turbulence_roughness_htc(case_dir: Path) -> None:
 def _queue_surface_fields_by_roughness(participants, case_dir: Path) -> None:
     """Queue M6 Ts and FF distributions colored by roughness at every slice."""
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
     plot_keys = ("surface_temperature_vs_s", "freezing_fraction_vs_s")
     specs = {
@@ -538,6 +607,7 @@ def _queue_surface_fields_by_roughness(participants, case_dir: Path) -> None:
             combined = None
             model_combined = None
             shown_model_roughness = set()
+            model_roughness_figures = []
             for rank, (roughness, (label, color, _)) in enumerate(HTC_ROUGHNESS_STYLES.items()):
                 figure, _, _, _ = cutdata_builder.build_cutdata_figure(
                     participants, CASE_ID, "L1", spec,
@@ -546,6 +616,8 @@ def _queue_surface_fields_by_roughness(participants, case_dir: Path) -> None:
                 if combined is None:
                     combined = go.Figure(layout=figure.layout)
                     model_combined = go.Figure(layout=figure.layout)
+                model_per_roughness = go.Figure(layout=figure.layout)
+                shown_per_roughness_models = set()
                 for trace in figure.data:
                     participant_match = re.match(r"^(\d{1,3})(?=\D|$)", str(trace.name or ""))
                     if participant_match is None:
@@ -569,8 +641,6 @@ def _queue_surface_fields_by_roughness(participants, case_dir: Path) -> None:
                     trace.legendgroup = f"{plot_key}_roughness_{roughness}"
                     trace.legendrank = rank
                     combined.add_trace(trace)
-                    if participant_id == "015":
-                        continue
                     model_key = next((
                         key for key, style in ONERAM6_TURBULENCE_MODEL_STYLES.items()
                         if participant_id in style["participant_ids"]
@@ -595,6 +665,23 @@ def _queue_surface_fields_by_roughness(participants, case_dir: Path) -> None:
                     model_trace.showlegend = group not in shown_model_roughness
                     shown_model_roughness.add(group)
                     model_combined.add_trace(model_trace)
+                    panel_trace = type(model_trace)(model_trace)
+                    panel_group = f"{plot_key}_turbulence_model_{model_key}"
+                    panel_trace.name = model_style["label"]
+                    panel_trace.legendgroup = panel_group
+                    panel_trace.legendrank = model_style["rank"]
+                    panel_trace.showlegend = panel_group not in shown_per_roughness_models
+                    shown_per_roughness_models.add(panel_group)
+                    model_per_roughness.add_trace(panel_trace)
+                model_roughness_figures.append((label, model_per_roughness))
+                if roughness == "1mm" and model_per_roughness.data:
+                    one_mm_name = (
+                        f"tc_oneram6_L1_{spec['filename_slug']}_slice_{slice_slug}_"
+                        "roughness_1mm_grouped_turbulence_models.png"
+                    )
+                    cutdata_builder.PNG_EXPORT_QUEUE.append((
+                        go.Figure(model_per_roughness), case_dir / one_mm_name,
+                    ))
             if combined is None or not combined.data:
                 raise RuntimeError(f"No M6 {plot_key} roughness data for slice {slice_value}")
             if plot_key == "freezing_fraction_vs_s":
@@ -609,17 +696,50 @@ def _queue_surface_fields_by_roughness(participants, case_dir: Path) -> None:
                 raise RuntimeError(
                     f"No M6 {plot_key} turbulence-model data for slice {slice_value}"
                 )
-            model_combined.update_layout(legend_traceorder="normal")
+            panels = make_subplots(
+                rows=2, cols=2, horizontal_spacing=0.08, vertical_spacing=0.14,
+                subplot_titles=tuple(label for label, _ in model_roughness_figures),
+            )
+            shown_panel_groups = set()
+            for index, (_, grouped) in enumerate(model_roughness_figures):
+                row, col = divmod(index, 2)
+                row += 1
+                col += 1
+                for original in grouped.data:
+                    trace = type(original)(original)
+                    trace.showlegend = trace.legendgroup not in shown_panel_groups
+                    shown_panel_groups.add(trace.legendgroup)
+                    panels.add_trace(trace, row=row, col=col)
+                source_xaxis = grouped.layout.xaxis.to_plotly_json()
+                source_yaxis = grouped.layout.yaxis.to_plotly_json()
+                source_xaxis.pop("domain", None)
+                source_xaxis.pop("anchor", None)
+                source_yaxis.pop("domain", None)
+                source_yaxis.pop("anchor", None)
+                panels.update_xaxes(**source_xaxis, row=row, col=col)
+                panels.update_yaxes(**source_yaxis, row=row, col=col)
+            for col in (1, 2):
+                panels.update_xaxes(title_text="Surface distance from highlight [m]", row=2, col=col)
+            if plot_key == "freezing_fraction_vs_s":
+                panels.update_xaxes(range=[-0.125, 0.125], autorange=False)
+            y_title = "Surface temperature [K]" if plot_key == "surface_temperature_vs_s" else "Freezing fraction [-]"
+            panels.update_yaxes(title_text=y_title, row=1, col=1)
+            panels.update_yaxes(title_text=y_title, row=2, col=1)
+            panels.update_yaxes(title_text="", row=1, col=2)
+            panels.update_yaxes(title_text="", row=2, col=2)
+            panels.update_annotations(font={"size": 34})
+            panels.update_layout(showlegend=True)
             model_name = (
                 f"tc_oneram6_L1_{spec['filename_slug']}_slice_{slice_slug}_"
-                "grouped_turbulence_models.png"
+                "grouped_turbulence_models_roughness_panels.png"
             )
-            cutdata_builder.PNG_EXPORT_QUEUE.append((model_combined, case_dir / model_name))
+            cutdata_builder.PNG_EXPORT_QUEUE.append((panels, case_dir / model_name))
 
 
 def _queue_ice_shapes_by_roughness(participants, case_dir: Path) -> None:
     """Queue 7-bin roughness and turbulence-model M6 ice shapes."""
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
     styles = HTC_ROUGHNESS_STYLES
     roughness_slugs = {
@@ -630,6 +750,7 @@ def _queue_ice_shapes_by_roughness(participants, case_dir: Path) -> None:
         combined = None
         model_combined = None
         shown_combinations = set()
+        model_roughness_figures = []
         slug = str(slice_value).replace(".", "p")
         for rank, (roughness, (label, color, _)) in enumerate(styles.items()):
             source, _, _ = iceshape_builder.build_single_layer_ice_shape_figure(
@@ -716,13 +837,7 @@ def _queue_ice_shapes_by_roughness(participants, case_dir: Path) -> None:
                     show_set.add(group)
                     target.add_trace(model_trace)
             if len(per_roughness.data) > 1:
-                per_name = (
-                    f"tc_oneram6_L1_single_layer_ice_shape_slice_{slug}_bins07_"
-                    f"roughness_{roughness_slugs[roughness]}_grouped_turbulence_models.png"
-                )
-                iceshape_builder.PNG_EXPORT_QUEUE.append(
-                    (per_roughness, case_dir / per_name)
-                )
+                model_roughness_figures.append((label, per_roughness))
         roughness_by_participant = {}
         for trace in combined.data:
             meta = trace.meta if isinstance(trace.meta, dict) else {}
@@ -758,6 +873,45 @@ def _queue_ice_shapes_by_roughness(participants, case_dir: Path) -> None:
             model_x_range[0] = axis["x_min"]
         model_combined.update_xaxes(range=axis["x_range"] or model_x_range)
         model_combined.update_yaxes(range=axis["y_range"] or model_y_range)
+        panels = make_subplots(
+            rows=2, cols=2, horizontal_spacing=0.06, vertical_spacing=0.12,
+            subplot_titles=tuple(label for label, _ in model_roughness_figures),
+        )
+        shown_panel_groups = set()
+        for index, (_, grouped) in enumerate(model_roughness_figures):
+            row, col = divmod(index, 2)
+            row += 1
+            col += 1
+            for original in grouped.data:
+                trace = go.Scatter(original.to_plotly_json())
+                trace.update(xaxis=None, yaxis=None)
+                if trace.legendgroup == "clean_reference":
+                    trace.showlegend = False
+                else:
+                    trace.showlegend = trace.legendgroup not in shown_panel_groups
+                    shown_panel_groups.add(trace.legendgroup)
+                panels.add_trace(trace, row=row, col=col)
+            panels.update_xaxes(range=axis["x_range"] or model_x_range, row=row, col=col)
+            axis_number = index + 1
+            panels.update_yaxes(
+                range=axis["y_range"] or model_y_range,
+                scaleanchor="x" if axis_number == 1 else f"x{axis_number}",
+                scaleratio=1,
+                row=row, col=col,
+            )
+        for col in (1, 2):
+            panels.update_xaxes(title_text="X [m]", row=2, col=col)
+        panels.update_yaxes(title_text="Z [m]", row=1, col=1)
+        panels.update_yaxes(title_text="Z [m]", row=2, col=1)
+        panels.update_yaxes(title_text="", row=1, col=2)
+        panels.update_yaxes(title_text="", row=2, col=2)
+        panels.update_annotations(font={"size": 34})
+        panels.update_layout(showlegend=True)
+        panel_name = (
+            f"tc_oneram6_L1_single_layer_ice_shape_slice_{slug}_bins07_"
+            "grouped_turbulence_models_roughness_panels.png"
+        )
+        iceshape_builder.PNG_EXPORT_QUEUE.append((panels, case_dir / panel_name))
         model_name = (
             f"tc_oneram6_L1_single_layer_ice_shape_slice_{slug}_bins07_"
             "grouped_turbulence_models.png"
@@ -768,8 +922,9 @@ def _queue_ice_shapes_by_roughness(participants, case_dir: Path) -> None:
 def _queue_horn_comparisons(participants, case_dir: Path) -> None:
     """Horn convergence from the same single-layer contours as the comparisons."""
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
-    styles = {**HTC_ROUGHNESS_STYLES, "variable_roughness": ("Variable", "#4C78A8", "triangle-up")}
+    styles = HTC_ROUGHNESS_STYLES
     for slice_value in CASE_SLICES[CASE_ID]:
         for grouped in (False, True):
             series = {}
@@ -829,6 +984,52 @@ def _queue_horn_comparisons(participants, case_dir: Path) -> None:
             selection = "bins07_grouped_roughness" if grouped else "bins15_roughness_1mm"
             path = case_dir / f"tc_oneram6_upper_horn_angle_vs_n_slice_{slug}_{selection}.png"
             convergence_data_builder.PNG_EXPORT_QUEUE.append((figure, path))
+            if grouped:
+                roughness_order = ("0.5mm", "1mm", "1.5mm", "variable_roughness")
+                panels = make_subplots(
+                    rows=2, cols=2,
+                    horizontal_spacing=0.08, vertical_spacing=0.15,
+                    subplot_titles=tuple(styles[key][0] for key in roughness_order),
+                )
+                shown_participants: set[str] = set()
+                for index, roughness in enumerate(roughness_order):
+                    row, col = divmod(index, 2)
+                    row += 1
+                    col += 1
+                    for original in figure.data:
+                        meta = original.meta if isinstance(original.meta, dict) else {}
+                        if meta.get("ipw3_roughness_key") != roughness:
+                            continue
+                        raw_pid = meta.get("ipw3_participant_id")
+                        if raw_pid is None:
+                            continue
+                        pid = str(raw_pid).zfill(3)
+                        trace = go.Scatter(original.to_plotly_json())
+                        trace.update(xaxis=None, yaxis=None)
+                        trace.name = pid
+                        trace.legendgroup = f"horn_participant_{pid}"
+                        trace.legendrank = int(pid)
+                        trace.showlegend = pid not in shown_participants
+                        trace.line.update(color=styles[roughness][1], width=5, dash="solid")
+                        trace.marker.update(
+                            color=styles[roughness][1], size=14,
+                            symbol=GROUPED_ROUGHNESS_PARTICIPANT_SYMBOLS.get(pid, "circle"),
+                        )
+                        panels.add_trace(trace, row=row, col=col)
+                        shown_participants.add(pid)
+                panels.update_xaxes(title_text="N<sub>cells</sub><sup>−1/3</sup> [-]")
+                panels.update_yaxes(title_text="α<sub>upper, horn</sub> [deg]")
+                panels.update_xaxes(title_text="", row=1, col=1)
+                panels.update_xaxes(title_text="", row=1, col=2)
+                panels.update_yaxes(title_text="", row=1, col=2)
+                panels.update_yaxes(title_text="", row=2, col=2)
+                panels.update_annotations(font={"size": 34})
+                panels.update_layout(showlegend=True)
+                panel_path = path.with_name(
+                    f"tc_oneram6_upper_horn_angle_vs_n_slice_{slug}_"
+                    "bins07_grouped_roughness_panels.png"
+                )
+                convergence_data_builder.PNG_EXPORT_QUEUE.append((panels, panel_path))
             relative = go.Figure(figure)
             convergence_data_builder.normalize_grid_convergence_to_l1(relative)
             relative.update_yaxes(title_text="Δα<sub>upper, horn</sub> / α<sub>upper, horn,L1</sub> [%]")
@@ -1068,6 +1269,47 @@ def _queue_qc_roughness(participants, case_dir: Path) -> None:
         relative_path = path.with_name(path.stem + "_relative_to_l1.png")
         convergence_data_builder.PNG_EXPORT_QUEUE.append((relative, relative_path))
 
+        one_mm, _, _ = convergence_data_builder.build_qc_prime_integration_figure(
+            participants, CASE_ID, slice_position=slice_value, roughness_filter="1mm",
+        )
+        model_traces = []
+        shown_models = set()
+        for trace in one_mm.data:
+            participant_id = get_trace_participant_id(trace)
+            model_key = next((
+                key for key, style in ONERAM6_TURBULENCE_MODEL_STYLES.items()
+                if participant_id in style["participant_ids"]
+            ), None)
+            if model_key is None:
+                continue
+            model_style = ONERAM6_TURBULENCE_MODEL_STYLES[model_key]
+            model_color = ONERAM6_TURBULENCE_ROUGHNESS_COLORS[model_key]["1mm"]
+            meta = dict(trace.meta) if isinstance(trace.meta, dict) else {}
+            meta["ipw3_participant_id"] = participant_id
+            meta["ipw3_roughness_key"] = "1mm"
+            trace.meta = meta
+            trace.line.update(color=model_color, width=5, dash="solid")
+            trace.marker.update(
+                color=model_color, size=9, maxdisplayed=20,
+                line={"color": "#000000", "width": 1},
+            )
+            trace.mode = "lines+markers"
+            group = f"qc_turbulence_model_{model_key}"
+            trace.name = model_style["label"]
+            trace.legendgroup = group
+            trace.legendrank = model_style["rank"]
+            trace.showlegend = group not in shown_models
+            shown_models.add(group)
+            model_traces.append(trace)
+        if not model_traces:
+            raise RuntimeError(f"No M6 1 mm Qc turbulence-model data at Y={slice_value}")
+        one_mm.data = tuple(sorted(model_traces, key=lambda trace: trace.legendrank))
+        one_mm_name = (
+            f"tc_oneram6_qc_prime_vs_n_y_{slice_value}_roughness_1mm_"
+            "grouped_turbulence_models.png"
+        )
+        convergence_data_builder.PNG_EXPORT_QUEUE.append((one_mm, case_dir / one_mm_name))
+
 
 def _queue_mean_roughness_variants() -> None:
     import plotly.graph_objects as go
@@ -1149,8 +1391,6 @@ def _style_figure(figure, module, export_path: Path, spec: FigureSpec) -> None:
     is_bin_convergence = "_vs_inverse_bins" in name or "_distribution_convergence_" in name
 
     excluded = {str(value).zfill(3) for value in excluded_ids}
-    if "freezing_fraction" in name:
-        excluded.add("015")
     if excluded:
         figure.data = tuple(
             trace for trace in figure.data
@@ -1311,6 +1551,8 @@ def _style_figure(figure, module, export_path: Path, spec: FigureSpec) -> None:
 
     if "_surface_temperature_vs_s_" in name:
         figure.update_yaxes(range=[270, 275], autorange=False)
+    if name == "tc_oneram6_mean_surface_temperature_vs_n_slice_0p75_roughness_1mm":
+        figure.update_yaxes(range=[272, 275], autorange=False)
     if "_freezing_fraction_vs_s_" in name:
         figure.update_yaxes(range=[-0.05, 1.05], autorange=False)
 
@@ -1318,8 +1560,8 @@ def _style_figure(figure, module, export_path: Path, spec: FigureSpec) -> None:
         _add_surface_temperature_zoom(figure)
 
 
-def _add_001_single_bin_ice_shapes(participants):
-    """Include CIRA's identified single-bin result in the L1 15-bin comparisons."""
+def _add_001_l1_single_bin_comparisons(participants):
+    """Compare CIRA's L1 single-bin ice shapes with the L1 15-bin submissions."""
     selected = [p for p in participants if str(p.participant_id).zfill(3) == "001"]
     if not selected:
         return
@@ -1338,6 +1580,9 @@ def _add_001_single_bin_ice_shapes(participants):
             if not re.match(r"^001(?=\D|$)", str(trace.name or "")):
                 continue
             trace.name = "001 (1 bin)"
+            meta = dict(trace.meta) if isinstance(trace.meta, dict) else {}
+            meta["ipw3_grid_level"] = "L1"
+            trace.meta = meta
             figure.add_trace(trace)
 
 
@@ -1389,6 +1634,7 @@ def _queue_roughness_participant_panels(queues):
                 ice_shapes=is_ice_shape,
                 columns=2 if use_two_columns else None,
                 participant_title_size=30 if use_two_columns or is_ice_shape else 26,
+                participant_model_labels=ONERAM6_PARTICIPANT_TURBULENCE_LABELS,
             )
             if "_single_layer_ice_shape_" in path.stem:
                 for axis_name in panels.layout:
@@ -2011,7 +2257,8 @@ def generate(
             and destination not in excluded_champs_aerodynamic
         }
     if output_dir.exists():
-        shutil.rmtree(output_dir)
+        for old_image in output_dir.rglob("*.png"):
+            old_image.unlink()
     output_dir.mkdir(parents=True, exist_ok=True)
     convergence_data_builder.clear_png_export_queue()
     cutdata_builder.clear_png_export_queue()
@@ -2030,20 +2277,6 @@ def generate(
         convergence_data_builder.build_water_mass_diameter_dispersion_figures(participants, CASE_ID)
         site.build_beta_max_analysis_section(participants, CASE_ID)
         convergence_data_builder.build_upper_horn_angle_convergence_section(participants, CASE_ID)
-        for pid, filename, figure in participant_horn_method_figures(participants, CASE_ID):
-            if participant_id is not None and str(participant_id).zfill(3) == "007":
-                continue
-            convergence_data_builder.PNG_EXPORT_QUEUE.append((figure, case_dir / filename))
-            presentation_figures[f"ICE_HORN_PARTICIPANT/p{pid}/{filename}"] = (
-                CASE_ID, filename, WIDTH, HEIGHT, [], False,
-            )
-        for filename, figure in ice_limit_figures(participants, CASE_ID, slice_filter=0.75):
-            if participant_id is not None and str(participant_id).zfill(3) == "007":
-                continue
-            convergence_data_builder.PNG_EXPORT_QUEUE.append((figure, case_dir / filename))
-            presentation_figures[f"ICE_LIMITS/{filename}"] = (
-                CASE_ID, filename, WIDTH, HEIGHT, [], True,
-            )
         for grid_level in sorted(VALID_GRID_LEVELS):
             site.build_grid_page_content(participants, CASE_ID, grid_level)
 
@@ -2057,7 +2290,7 @@ def generate(
         _queue_ice_shapes_by_roughness(participants, case_dir)
         _queue_horn_comparisons(participants, case_dir)
         _queue_horn_bin_comparisons(participants, case_dir)
-        _add_001_single_bin_ice_shapes(participants)
+        _add_001_l1_single_bin_comparisons(participants)
 
         queues = (
             (convergence_data_builder, convergence_data_builder.PNG_EXPORT_QUEUE),
@@ -2303,6 +2536,18 @@ def generate(
             shutil.copy2(source, destination)
         if missing and participant_id is None:
             raise RuntimeError("Missing ONERA M6 presentation plot exports:\n  " + "\n  ".join(missing))
+    if participant_id is None:
+        from tools.generate_oneram6_mass_roughness_panels import build_mass_panel
+
+        for plot_key, category in (("water_mass_vs_n", "IMPINGEMENT"),
+                                   ("ice_mass_vs_n", "ICE_ACCRETION")):
+            image_name = f"tc_oneram6_{plot_key}_grouped_roughness_participants.png"
+            destination = output_dir / category / image_name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            build_mass_panel(participants, plot_key).write_image(destination)
+            roughness_destination = output_dir / "ROUGHNESS" / image_name
+            roughness_destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(destination, roughness_destination)
     return sum(1 for path in output_dir.rglob("*.png"))
 
 

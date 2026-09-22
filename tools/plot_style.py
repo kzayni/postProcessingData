@@ -223,11 +223,11 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
         # Beta has ONE block shared by BINS01/BINS03/BINS07/BINS15/CARDS.
         "plots": {
             # Grid convergence: aerodynamic coefficients
-            "cl_vs_n": {"height": 520, "yaxis": {"title": {"text": "CL [-]"}, "range": [0.40, 0.50], "dtick": 0.02}},
+            "cl_vs_n": {"height": 520, "yaxis": {"title": {"text": "CL [-]"}, "range": [0.35, 0.55], "dtick": 0.02}},
             "cd_vs_n": {"height": 520, "yaxis": {"title": {"text": "CD [-]"}, "range": [0.005, 0.02], "dtick": 0.0025}},
             "cmy_vs_n": {"height": 520, "yaxis": {"title": {"text": "CM [-]"}, "range": [-0.025, 0.01], "dtick": 0.005}},
             # Grid convergence: total icing masses
-            "water_mass_vs_n": {"height": 520, "yaxis": {"title": {"text": "m<sub>water</sub> [g]"}}},
+            "water_mass_vs_n": {"height": 520, "yaxis": {"title": {"text": "m<sub>water</sub> [g]"}, "range": [100.0, 130.0]}},
             "ice_mass_vs_n": {"height": 520, "yaxis": {"title": {"text": "m<sub>ice</sub> [g]"}}},
             "water_evap_mass_vs_n": {"height": 520, "yaxis": {"title": {"text": "m<sub>evap</sub> [g]"}, "range": [0.0, 15.0]}},
             # Grid convergence: icing masses by droplet diameter
@@ -239,7 +239,7 @@ CASE_PLOT_STYLES: dict[str, dict[str, Any]] = {
             "water_mass_cv_vs_droplet_diameter": {"height": 520, "yaxis": {"title": {"text": "m<sub>water</sub> coefficient of variation [%]"}}},
             "qc_prime": {"height": 520, "yaxis": {"title": {"text": "Q<sub>c</sub>′ [W/m]"}, "range": [-100.0, 400.0]}},
             # L1-relative copies displayed after each original convergence plot
-            "cl_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCL from L1 [%]"}}},
+            "cl_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCL from L1 [%]"}, "range": [-5.0, 5.0]}},
             "cd_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCD from L1 [%]"}, "dtick": 25.0}},
             "cmy_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "ΔCM from L1 [%]"}}},
             "water_mass_vs_n_relative": {"height": 520, "yaxis": {"title": {"text": "Δm<sub>water</sub> from L1 [%]"}, "range": [-6.0, 6.0]}},

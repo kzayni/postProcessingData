@@ -1,11 +1,11 @@
-NACA0012 MODELING CHOICES ACROSS SUBMISSIONS
+# NACA0012 Modeling Choices Across Submissions
 
 ## Modeling Choices
 
 Participant IDs:  
-001, 002, 003, 004, 007, 008, 009, 010, 013, 014, 019
+001, 002, 003, 004, 007, 008, 009, 010, 013, 014, 015, 019
 
-| Participant | Turbulence | Roughness height | Droplet | HTC Method | Thermodynamics | Geometry Evolution |
+| Participant | Turbulence | Roughness Height | Droplet | HTC Method | Thermodynamics | Geometry Evolution |
 |-------------|------------|------------------|---------|------------|----------------|--------------------|
 | 001 | k-omega TNT | 1 mm | Eulerian | Not reported | Messinger | Lagrangian / IB |
 | 002 | k-omega SST | 1 mm | Lagrangian | BL Integral | Messinger | Interpolation |
@@ -17,6 +17,7 @@ Participant IDs:
 | 010 | SA-neg-QCR | Variable | Lagrangian | Two wall temperatures | Messinger | Prismatoid extrusion |
 | 013 | SA | Variable | Lagrangian | One-solution + Reynolds analogy | Messinger | Extrusion |
 | 014 | SA-neg | 0.5334 mm | Lagrangian | BL Integral + Reynolds analogy | Messinger | Algebraic |
+| 015 | k-omega SST | 1 mm | Eulerian | T_rec | SWIM | Remeshing |
 | 019 | k-omega SST | Variable / 0.5 mm | Eulerian | Not reported | SWIM+ | Lagrangian / remeshing |
 
 Roughness-height notes:

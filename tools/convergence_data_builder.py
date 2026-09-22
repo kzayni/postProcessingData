@@ -863,7 +863,6 @@ def grid_convergence_figure_pair_html(
     relative_fig = go.Figure(participant_fig)
     missing_l1 = normalize_grid_convergence_to_l1(relative_fig)
     relative_key = f"{plot_key}_relative"
-    apply_individual_plot_overrides(relative_fig, case_id, relative_key)
     harmonize_comparison_figure(
         relative_fig, grid_order,
         GRID_CONVERGENCE_NORMALIZATION.get("grid_axis_title", "Grid level"),
@@ -882,6 +881,9 @@ def grid_convergence_figure_pair_html(
             tickformat=".3g",
             exponentformat="none",
         )
+    # User-editable relative-plot settings must be applied last so they can
+    # intentionally replace the generic percentage-axis defaults above.
+    apply_individual_plot_overrides(relative_fig, case_id, relative_key)
     relative_title = (
         "Grid Convergence of Integrated Lift Coefficient | Signed Relative Difference from L1"
         if plot_key == "cl_vs_n"
@@ -1351,6 +1353,7 @@ def build_qc_prime_integration_figure(
             for dataset_id, dataset_data in sorted(grid_data.datasets.items()):
                 path = dataset_data.cut_data_file
                 cut_data = dataset_data.cut_data
+                supplemental_cut_data = getattr(dataset_data, "cp_beta_cut_data", None)
                 if path is None or cut_data is None:
                     continue
                 value = None
@@ -1360,7 +1363,7 @@ def build_qc_prime_integration_figure(
                 # HTC and Ts are repeated for each droplet-bin zone. Integrate
                 # the first usable zone at the requested slice so each dataset
                 # contributes once.
-                for zone in cut_data.zones.values():
+                for zone_name, zone in cut_data.zones.items():
                     if roughness_filter is not None and _cutdata_roughness_key(zone.name) != roughness_filter:
                         continue
                     if slice_position is not None:
@@ -1380,13 +1383,54 @@ def build_qc_prime_integration_figure(
                     cp_column = find_column_case_insensitive(zone.data.columns, ["Cp", "PressureCoefficient"])
                     if s_column is None or htc_column is None or ts_column is None or cp_column is None:
                         continue
-                    data = valid_numeric_rows(zone.data, s_column, htc_column, ts_column, cp_column)
+                    data = valid_numeric_rows(zone.data, s_column, htc_column, ts_column)
                     if len(data) < 2:
                         continue
                     s = pd.to_numeric(data[s_column], errors="coerce").to_numpy(dtype=float)
                     htc = pd.to_numeric(data[htc_column], errors="coerce").to_numpy(dtype=float)
                     ts = pd.to_numeric(data[ts_column], errors="coerce").to_numpy(dtype=float)
-                    cp = pd.to_numeric(data[cp_column], errors="coerce").to_numpy(dtype=float)
+                    cp = pd.to_numeric(data[cp_column], errors="coerce").to_numpy(dtype=float, copy=True)
+                    valid_cp = np.isfinite(cp) & (cp > -998.0)
+                    if not valid_cp.all() and supplemental_cut_data is not None:
+                        supplemental_zone = supplemental_cut_data.zones.get(zone_name)
+                        if supplemental_zone is not None:
+                            supplemental_s_column = find_column_case_insensitive(
+                                supplemental_zone.data.columns, ["s"],
+                            )
+                            supplemental_cp_column = find_column_case_insensitive(
+                                supplemental_zone.data.columns, ["Cp", "PressureCoefficient"],
+                            )
+                            if supplemental_s_column is not None and supplemental_cp_column is not None:
+                                supplemental_s = pd.to_numeric(
+                                    supplemental_zone.data[supplemental_s_column], errors="coerce",
+                                ).to_numpy(dtype=float)
+                                supplemental_cp = pd.to_numeric(
+                                    supplemental_zone.data[supplemental_cp_column], errors="coerce",
+                                ).to_numpy(dtype=float)
+                                supplemental_valid = (
+                                    np.isfinite(supplemental_s) & np.isfinite(supplemental_cp)
+                                    & (supplemental_cp > -998.0)
+                                )
+                                if supplemental_valid.sum() >= 2:
+                                    supplemental_s = supplemental_s[supplemental_valid]
+                                    supplemental_cp = supplemental_cp[supplemental_valid]
+                                    order = np.argsort(supplemental_s)
+                                    supplemental_s = supplemental_s[order]
+                                    supplemental_cp = supplemental_cp[order]
+                                    supplemental_s, unique_indices = np.unique(
+                                        supplemental_s, return_index=True,
+                                    )
+                                    supplemental_cp = supplemental_cp[unique_indices]
+                                    in_range = (
+                                        (s >= supplemental_s[0]) & (s <= supplemental_s[-1])
+                                    )
+                                    cp[in_range] = np.interp(
+                                        s[in_range], supplemental_s, supplemental_cp,
+                                    )
+                                    valid_cp = np.isfinite(cp) & (cp > -998.0)
+                    s, htc, ts, cp = s[valid_cp], htc[valid_cp], ts[valid_cp], cp[valid_cp]
+                    if len(s) < 2:
+                        continue
                     t_rec = recovery_temperature(cp, t_inf, settings.mach_inf)
                     valid_recovery = np.isfinite(t_rec)
                     s, htc, ts, t_rec = s[valid_recovery], htc[valid_recovery], ts[valid_recovery], t_rec[valid_recovery]
@@ -1401,6 +1445,12 @@ def build_qc_prime_integration_figure(
                     skipped_notes.append(
                         f"Participant ID {participant.participant_id}, {grid_level} {dataset_id}: {reason}."
                     )
+                    continue
+                if (
+                    case_id == "TC_ONERAM6"
+                    and str(participant.participant_id).zfill(3) == "015"
+                    and grid_level == "L1"
+                ):
                     continue
                 values.append((grid_convergence_coordinate(num_cells, cell_counts[1]), value, grid_level, dataset_id, selected_roughness_key))
 
@@ -2417,6 +2467,33 @@ def _cutdata_roughness_key(zone_name: str) -> str:
     return f"{value:g}mm"
 
 
+IMPINGEMENT_BETA_THRESHOLD = 0.0001
+
+
+def _interpolated_impingement_limits(
+    s_values: pd.Series,
+    beta_values: pd.Series,
+    threshold: float = IMPINGEMENT_BETA_THRESHOLD,
+) -> tuple[float, float] | None:
+    """Return the outer β-threshold crossings using linear interpolation."""
+    s = np.asarray(s_values, dtype=float)
+    beta = np.asarray(beta_values, dtype=float)
+    if s.size == 0 or not np.any(beta > threshold):
+        return None
+
+    order = np.argsort(s, kind="stable")
+    s = s[order]
+    beta = beta[order]
+    limit_candidates = list(s[beta >= threshold])
+
+    for s0, s1, beta0, beta1 in zip(s[:-1], s[1:], beta[:-1], beta[1:]):
+        if (beta0 < threshold < beta1) or (beta1 < threshold < beta0):
+            fraction = (threshold - beta0) / (beta1 - beta0)
+            limit_candidates.append(s0 + fraction * (s1 - s0))
+
+    return float(min(limit_candidates)), float(max(limit_candidates))
+
+
 def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: str | None = None) -> str:
     """Plot beta maximum and impingement extent by participant/grid/distribution."""
     if VARIABLE_FILTER is not None and not VARIABLE_FILTER.intersection(
@@ -2471,15 +2548,16 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
                 s_values = s_values[valid]
                 if beta_values.empty:
                     continue
-                impinging_s = s_values[beta_values > 0.0001]
-                if impinging_s.empty:
+                impingement_limits = _interpolated_impingement_limits(s_values, beta_values)
+                if impingement_limits is None:
                     continue
+                s_lower, s_upper = impingement_limits
                 key = (participant.participant_id, bin_set, roughness_key, slice_key, grid_level)
                 zone_metrics = {
                     "beta_max": float(beta_values.max()),
                     "s_peak": float(s_values.loc[beta_values.idxmax()]),
-                    "s_lower": float(impinging_s.min()),
-                    "s_upper": float(impinging_s.max()),
+                    "s_lower": s_lower,
+                    "s_upper": s_upper,
                 }
                 zone_metrics["width"] = zone_metrics["s_upper"] - zone_metrics["s_lower"]
                 previous = metrics.get(key)
@@ -2575,7 +2653,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
         plot_definitions = (
             ("beta_max", "beta_max_vs_n", "β<sub>max</sub> [-]", "Maximum collection efficiency", "β<sub>max</sub> = max β(s) for β(s) &gt; 0."),
             ("s_peak", "peak_beta_s_vs_n", "s<sub>βmax</sub> [m]", "Peak β s position", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum."),
-            ("width", "impingement_width_vs_n", "Width<sub>imp</sub> [m]", "Impingement width", "Width<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001, using s computed along the already rotated airfoil."),
+            ("width", "impingement_width_vs_n", "Width<sub>imp</sub> [m]", "Impingement width", "Width<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub>, where both β = 0.0001 limits are linearly interpolated between adjacent submitted points, using s computed along the already rotated airfoil."),
         )
         for metric_key, style_key, y_label, title_prefix, formula in plot_definitions:
             fig = figures[metric_key]
@@ -2608,7 +2686,7 @@ def build_beta_max_analysis_section(participants, case_id: str, _slice_filter: s
     distribution_metric_specs = (
         ("beta_max", "beta_max_vs_bins", "β<sub>max</sub> [-]", "β<sub>max</sub> = max β(s) for the selected grid and distribution."),
         ("s_peak", "peak_beta_s_vs_bins", "s<sub>βmax</sub> [m]", "s<sub>βmax</sub> is the submitted surface-coordinate position where β(s) reaches its maximum for the selected grid and distribution."),
-        ("width", "impingement_width_vs_bins", "Width<sub>imp</sub> [m]", "Width<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub> over submitted points where β(s) &gt; 0.0001 for the selected grid and distribution."),
+        ("width", "impingement_width_vs_bins", "Width<sub>imp</sub> [m]", "Width<sub>imp</sub> = s<sub>upper</sub> − s<sub>lower</sub>, where both β = 0.0001 limits are linearly interpolated between adjacent submitted points for the selected grid and distribution."),
     )
     for metric_key, style_key, y_label, formula in distribution_metric_specs:
         for grid_level in grid_order:
