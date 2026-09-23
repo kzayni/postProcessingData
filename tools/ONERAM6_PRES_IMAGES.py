@@ -66,6 +66,48 @@ ONERAM6_PARTICIPANT_TURBULENCE_LABELS = {
     for participant_id in style["participant_ids"]
 }
 
+ONERAM6_THERMODYNAMICS_MODEL_STYLES = {
+    "messinger": {
+        "participant_ids": {"001", "002", "003", "004", "007", "010", "013", "014"},
+        "label": "Messinger", "color": "#d62728", "rank": 0,
+    },
+    "swim": {
+        "participant_ids": {"008", "009", "019"},
+        "label": "SWIM", "color": "#1f77b4", "rank": 1,
+    },
+}
+
+
+def _color_evaporation_mass_by_thermodynamics(figure) -> None:
+    """Color evaporation-mass traces by thermodynamic model family."""
+    shown_groups: set[str] = set()
+    grouped_traces = []
+    for trace in figure.data:
+        participant_id = get_trace_participant_id(trace)
+        model_key = next((
+            key for key, style in ONERAM6_THERMODYNAMICS_MODEL_STYLES.items()
+            if participant_id in style["participant_ids"]
+        ), None)
+        if model_key is None:
+            continue
+        model_style = ONERAM6_THERMODYNAMICS_MODEL_STYLES[model_key]
+        group = f"evaporation_mass_thermodynamics_model_{model_key}"
+        meta = dict(trace.meta) if isinstance(trace.meta, dict) else {}
+        meta["ipw3_participant_id"] = participant_id
+        trace.meta = meta
+        trace.line.update(color=model_style["color"], width=5)
+        trace.marker.update(
+            color=model_style["color"],
+            line={"color": "#000000", "width": 1},
+        )
+        trace.name = str(model_style["label"])
+        trace.legendgroup = group
+        trace.legendrank = int(model_style["rank"])
+        trace.showlegend = group not in shown_groups
+        shown_groups.add(group)
+        grouped_traces.append(trace)
+    figure.data = tuple(sorted(grouped_traces, key=lambda item: item.legendrank))
+
 ONERAM6_TURBULENCE_ROUGHNESS_COLORS = {
     "kw": {
         "0.5mm": "#1F77B4", "1mm": "#2CA02C",
@@ -1382,6 +1424,8 @@ def _style_figure(figure, module, export_path: Path, spec: FigureSpec) -> None:
     _, _, width, height, excluded_ids, show_legend = spec[:6]
     median_line = spec[6] if len(spec) > 6 else None
     name = export_path.stem.lower()
+    if "water_evap_mass" in name:
+        _color_evaporation_mass_by_thermodynamics(figure)
     if re.fullmatch(r"tc_oneram6_(cl|cd|cmy)_vs_n_grouped_roughness_participants", name):
         return  # The subplot matrix already carries its own axis and legend layout.
     is_convergence = module is convergence_data_builder and (
@@ -1555,6 +1599,12 @@ def _style_figure(figure, module, export_path: Path, spec: FigureSpec) -> None:
         figure.update_yaxes(range=[272, 275], autorange=False)
     if "_freezing_fraction_vs_s_" in name:
         figure.update_yaxes(range=[-0.05, 1.05], autorange=False)
+
+    if name in {
+        "tc_oneram6_ice_mass_vs_n_1mm_bins15_all_grid_levels",
+        "tc_oneram6_ice_mass_vs_n_1mm_l1_vs_inverse_bins",
+    }:
+        figure.update_yaxes(range=[2.0, 3.0], autorange=False)
 
     if "_surface_temperature_vs_s_" in name:
         _add_surface_temperature_zoom(figure)
@@ -2124,6 +2174,28 @@ def _replace_ice_shapes_with_champs_grid_levels(queue, target_names: set[str]) -
     for target_name in target_names:
         is_multilayer = "_multilayer_ice_shape_" in target_name
         target = figures.get(target_name)
+        if target is None and is_multilayer:
+            # CHAMPS stores its multilayer contour in a separate auxiliary
+            # file, so participant-only builds do not queue a normal
+            # multilayer figure.  Create the layout/reference scaffold from
+            # the matching single-layer plot; the raw L1 multilayer contour
+            # is injected later in ``generate``.
+            scaffold_name = target_name.replace(
+                "_multilayer_ice_shape_", "_single_layer_ice_shape_", 1,
+            )
+            scaffold = figures.get(scaffold_name)
+            scaffold_path = next(
+                (path for _, path in queue if path.name == scaffold_name), None,
+            )
+            if scaffold is not None and scaffold_path is not None:
+                target = copy.deepcopy(scaffold)
+                target.data = tuple(
+                    trace for trace in target.data
+                    if not get_trace_participant_id(trace)
+                )
+                target_path = scaffold_path.with_name(target_name)
+                queue.append((target, target_path))
+                figures[target_name] = target
         if target is None:
             raise RuntimeError(f"Missing CHAMPS ice-shape plot: {target_name}")
         sources = {}
@@ -2131,6 +2203,9 @@ def _replace_ice_shapes_with_champs_grid_levels(queue, target_names: set[str]) -
             source_name = target_name.replace("_L1_", f"_{level}_", 1)
             source = figures.get(source_name)
             if source is None:
+                if is_multilayer:
+                    sources[level] = []
+                    continue
                 raise RuntimeError(f"Missing CHAMPS ice-shape source: {source_name}")
             sources[level] = [
                 copy.deepcopy(trace) for trace in source.data

@@ -102,11 +102,42 @@ NACA0012_THERMODYNAMICS_MODEL_STYLES = {
     },
     "swim_other": {
         "participant_ids": {"008", "009", "019"},
-        "label": "SWIM / Other",
+        "label": "SWIM",
         "color": "#1f77b4",
         "rank": 1,
     },
 }
+
+
+def _color_evaporation_mass_by_thermodynamics(figure) -> None:
+    """Color evaporation-mass traces by thermodynamic model family."""
+    shown_groups: set[str] = set()
+    grouped_traces = []
+    for trace in figure.data:
+        participant_id = get_trace_participant_id(trace)
+        model_key = next((
+            key for key, style in NACA0012_THERMODYNAMICS_MODEL_STYLES.items()
+            if participant_id in style["participant_ids"]
+        ), None)
+        if model_key is None:
+            continue
+        model_style = NACA0012_THERMODYNAMICS_MODEL_STYLES[model_key]
+        group = f"evaporation_mass_thermodynamics_model_{model_key}"
+        meta = dict(trace.meta) if isinstance(trace.meta, dict) else {}
+        meta["ipw3_participant_id"] = participant_id
+        trace.meta = meta
+        trace.line.update(color=model_style["color"], width=5)
+        trace.marker.update(
+            color=model_style["color"],
+            line={"color": "#000000", "width": 1},
+        )
+        trace.name = str(model_style["label"])
+        trace.legendgroup = group
+        trace.legendrank = int(model_style["rank"])
+        trace.showlegend = group not in shown_groups
+        shown_groups.add(group)
+        grouped_traces.append(trace)
+    figure.data = tuple(sorted(grouped_traces, key=lambda item: item.legendrank))
 
 OUTPUT_DIR = Path("FIGURES_NACA0012")
 
@@ -121,7 +152,7 @@ FigureSpec = tuple[str, str, int, int, list[str], bool] | tuple[
 
 # POLIMO L1-L4 BINS15 ice-shape overlay stroke widths, in pixels.
 # Edit these values to change only the two participant-007 presentation plots.
-POLIMO_COMBINED_ICE_LINE_WIDTH = {"L1": 3, "L2": 5, "L3": 5, "L4": 5}
+POLIMO_COMBINED_ICE_LINE_WIDTH = {"L1": 5, "L2": 5, "L3": 5, "L4": 5}
 
 
 def _read_polimo_normals_comparison(path: Path):
@@ -527,11 +558,7 @@ NACA0012_EXCLUDED_PRESENTATION_STEMS = {
     "tc_naca0012_ae3933_qc_prime_vs_n_y_0.9144_grouped_roughness",
     "tc_naca0012_ae3933_qc_prime_vs_n_y_0.9144_relative_to_l1",
     "tc_naca0012_ae3932_ice_evap_to_water_ratio_vs_n_required_bins15",
-    "tc_naca0012_ae3932_water_evap_mass_vs_n_unspecified_bins15_all_grid_levels",
-    "tc_naca0012_ae3932_water_evap_mass_vs_n_unspecified_l1_vs_inverse_bins",
     "tc_naca0012_ae3933_ice_evap_to_water_ratio_vs_n_required_bins15",
-    "tc_naca0012_ae3933_water_evap_mass_vs_n_unspecified_bins15_all_grid_levels",
-    "tc_naca0012_ae3933_water_evap_mass_vs_n_unspecified_l1_vs_inverse_bins",
     "tc_naca0012_ae3933_upper_horn_angle_by_participant_bins15_all_grid_levels_grouped_roughness",
     "tc_naca0012_ae3933_upper_horn_angle_by_participant_bins15_all_grid_levels",
     "tc_naca0012_ae3932_L1_single_layer_ice_shape_slice_0p9144_bins15_grouped_roughness",
@@ -1055,6 +1082,7 @@ def _queue_polimo_water_mass_method_comparisons(participant, queue, case_dir: Pa
     figure.update_yaxes(
         title_font={"size": 36}, tickfont={"size": 28},
         title_standoff=50, automargin=True,
+        range=[100.0, 120.0], autorange=False,
     )
     filename = (
         "tc_naca0012_ae3932_water_mass_vs_n_"
@@ -1852,6 +1880,12 @@ def write_naca0012_presentation_figures(
                     y_min, y_max = ice_mass_y_range_by_case[case_id]
                     figure.update_yaxes(range=[y_min, y_max], autorange=False)
 
+                if (
+                    "_water_mass_vs_n_" in export_path.name
+                    and "_relative_" not in export_path.name
+                ):
+                    figure.update_yaxes(range=[100.0, 120.0], autorange=False)
+
                 if export_path.stem in {
                     "tc_naca0012_ae3932_ice_mass_vs_n_unspecified_l1_vs_inverse_bins",
                     "tc_naca0012_ae3933_ice_mass_vs_n_unspecified_l1_vs_inverse_bins",
@@ -1864,6 +1898,8 @@ def write_naca0012_presentation_figures(
                     figure.update_yaxes(range=[y_min, y_max], autorange=False)
 
                 plot_name = export_path.stem.lower()
+                if "water_evap_mass" in plot_name:
+                    _color_evaporation_mass_by_thermodynamics(figure)
                 if plot_name == "tc_naca0012_ae3932_width_bins15_relative_to_l1":
                     figure.update_yaxes(range=[-4.0, 8.0], autorange=False)
                 if plot_name == "tc_naca0012_ae3933_comparison_with_3932_ice_mass_bins15_percent":

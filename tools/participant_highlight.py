@@ -78,7 +78,12 @@ def order_comparison_traces(figure, foreground_participant_id: str | None = None
         elif pid:
             # Keep legend entries ordered numerically even when one participant
             # is promoted in the SVG drawing order.
-            trace.legendrank = int(pid)
+            meta = trace.meta if isinstance(trace.meta, dict) else {}
+            grid_level = str(meta.get("ipw3_grid_level", "")).upper()
+            if not re.fullmatch(r"L[1-4]", grid_level):
+                trace_name = str(trace.name or "").strip().upper()
+                grid_level = trace_name if re.fullmatch(r"L[1-4]", trace_name) else ""
+            trace.legendrank = int(grid_level[1:]) if grid_level else int(pid)
             participants.append((pid == foreground, int(pid), position, trace))
         else:
             ordinary.append((position, trace))
